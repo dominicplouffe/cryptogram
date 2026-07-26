@@ -177,9 +177,9 @@ svg {
 
 .home-header {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
 }
 
 .home-titles {
@@ -189,7 +189,7 @@ svg {
 
 .home-title {
   margin: 0;
-  font-size: 26px;
+  font-size: 25px;
   font-weight: 750;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -201,36 +201,6 @@ svg {
   color: var(--text-faint);
 }
 
-.home-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin: 0 0 26px;
-}
-
-.home-stats div {
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 12px 6px;
-  text-align: center;
-}
-
-.home-stats dt {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-  font-weight: 700;
-}
-
-.home-stats dd {
-  margin: 4px 0 0;
-  font-size: 22px;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-}
-
 .home-section {
   margin: 0 0 10px;
   font-size: 12px;
@@ -240,26 +210,335 @@ svg {
   color: var(--text-faint);
 }
 
-.games {
+/* --- streak pill ---------------------------------------------------------- */
+/* The streak is the reason to come back tomorrow, so it stays in the header
+   instead of a tile that scrolls away as the library grows. */
+
+.streak-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  font-size: 15px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.streak-pill:active {
+  background: var(--key-active);
+}
+
+.streak-pill .flame {
+  width: 15px;
+  height: 15px;
+  fill: var(--warn);
+  stroke: none;
+}
+
+/* A lapsed streak should not glow like a live one. */
+.streak-pill.is-cold {
+  color: var(--text-faint);
+}
+
+.streak-pill.is-cold .flame {
+  fill: var(--text-faint);
+}
+
+/* --- today meter ---------------------------------------------------------- */
+
+.today {
+  margin-bottom: 22px;
+}
+
+.today-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.today-top .home-section {
+  margin: 0;
+  flex: 1;
+}
+
+.today-count {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* One dot per game, filled as its daily is finished. A meter rather than a
+   tally: "0 of 14" reads as failure, a row of empty dots reads as an invitation.
+   Wrapping means it survives a library of any size. */
+.dots {
   list-style: none;
-  margin: 0 0 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+/* An unfilled dot has to read as "still to do", so it is outlined against the
+   page rather than filled with a near-background colour. */
+.dots li {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--text-faint) 65%, transparent);
+}
+
+.dots li.is-solved {
+  background: var(--locked);
+  border-color: transparent;
+}
+
+.dots li.is-progress {
+  background: color-mix(in srgb, var(--warn) 35%, transparent);
+  border-color: var(--warn);
+}
+
+.dots li.is-lost {
+  background: color-mix(in srgb, var(--error) 30%, transparent);
+  border-color: var(--error);
+}
+
+.today-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.today-note:empty {
+  display: none;
+}
+
+/* --- category chips ------------------------------------------------------- */
+/* Scrolls sideways rather than wrapping, so a long list of kinds never pushes
+   the games themselves below the fold. */
+
+.chips {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+/* --- game rows ------------------------------------------------------------ */
+/* One compact row per game instead of a tall card. A dozen games stay on two
+   screens, and the group a row sits in says what to do with it. */
+
+.group {
+  margin-bottom: 22px;
+}
+
+.group .home-section {
+  margin-bottom: 9px;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
-.game-card {
+.game-row {
+  display: flex;
+  align-items: stretch;
   background: var(--bg-raised);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 16px;
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
-.game-head {
+.row-main {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 11px 6px 11px 12px;
+  text-align: left;
+}
+
+.row-main:active {
+  background: var(--key-active);
+}
+
+.row-mark {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  display: grid;
+  place-items: center;
+}
+
+.row-mark svg {
+  width: 26px;
+  height: 26px;
+  fill: var(--accent);
+  stroke: none;
+}
+
+.row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+/* A status line long enough to wrap would make rows different heights, which
+   destroys the scanability the whole layout is for. */
+.row-text .row-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Marks a game you have never opened. Derived from the play count, so it clears
+   itself the first time you play. */
+.pill-new {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.row-action {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 0 10px;
+}
+
+.row-more {
+  flex: 0 0 auto;
+  width: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  border-left: 1px solid var(--line);
+}
+
+.row-more:active {
+  background: var(--key-active);
+  color: var(--text);
+}
+
+.row-more svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: none;
+}
+
+/* Finished games stay reachable but stop competing for attention. */
+.group-done {
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+.group-done > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 0 9px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+
+.group-done > summary::-webkit-details-marker {
+  display: none;
+}
+
+.group-done > summary::after {
+  content: ' \25BE';
+}
+
+.group-done[open] > summary::after {
+  content: ' \25B4';
+}
+
+.group-done .game-row {
+  background: none;
+}
+
+.group-done .row-name,
+.group-done .row-action {
+  color: var(--text-dim);
+}
+
+.group-done .row-mark svg {
+  fill: var(--text-faint);
+}
+
+.home-foot {
+  display: block;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-foot:active {
+  background: var(--bg-raised);
 }
 
 .game-mark {
@@ -288,16 +567,6 @@ svg {
   fill: none;
   stroke: var(--text-faint);
   stroke-width: 26;
-}
-
-.game-titles {
-  min-width: 0;
-}
-
-.game-name {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
 }
 
 .game-blurb {
@@ -349,17 +618,6 @@ svg {
 
 .row-status.is-lost {
   color: var(--error);
-}
-
-.btn-compact {
-  flex: 0 0 auto;
-  min-height: 42px;
-  padding: 0 18px;
-  font-size: 14.5px;
-}
-
-.btn-block {
-  width: 100%;
 }
 
 .segmented-sm .seg {
@@ -882,6 +1140,20 @@ svg {
   border-color: transparent;
 }
 
+/* Must come after .btn, which sets flex: 1 -- otherwise the modifier that means
+   "size to your label" silently loses and the button stretches anyway. */
+.btn-compact {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 14.5px;
+}
+
+.btn-block {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
 .btn-primary:active {
   filter: brightness(0.92);
   background: var(--accent);
@@ -917,9 +1189,16 @@ svg {
   margin: 20px 0 0;
 }
 
+/* Flex, not fixed columns: the number of difficulty bands varies by game, and a
+   four-column grid leaves holes for the games that have fewer. */
 .stat-grid-sm {
+  display: flex;
   margin-top: 8px;
-  grid-template-columns: repeat(4, 1fr);
+}
+
+.stat-grid-sm div {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .stat-grid-sm dd {
@@ -928,11 +1207,6 @@ svg {
 
 .stat-grid-sm dt {
   font-size: 9.5px;
-}
-
-.stats-game + .stats-game {
-  margin-top: 18px;
-  border-top: 1px solid var(--line);
 }
 
 /* A loss is not a celebration: soften the sheet's headline. */
@@ -1013,44 +1287,71 @@ svg {
   font-weight: 400;
 }
 
-.how-to {
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 13px 15px;
-  margin: 0 0 26px;
+/* --- per-game sheet ------------------------------------------------------- */
+/* One sheet serves every game, so the library can grow without the home screen
+   growing with it. Rules, difficulty, free play and the record all live here. */
+
+.gs-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.gs-head-text {
+  min-width: 0;
+}
+
+.gs-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.gs-howto p {
+  margin: 0 0 9px;
   font-size: 14px;
+  line-height: 1.55;
   color: var(--text-dim);
 }
 
-.how-to summary {
-  cursor: pointer;
-  font-weight: 650;
-  color: var(--text);
+.gs-howto p:last-child {
+  margin-bottom: 0;
+}
+
+/* --- compact per-game stats ----------------------------------------------- */
+
+.stat-rows {
   list-style: none;
-  padding: 4px 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.how-to summary::-webkit-details-marker {
-  display: none;
+.stat-row {
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+  padding: 10px 12px;
 }
 
-.how-to summary::after {
-  content: ' \25BE';
+.stat-row-name {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.stat-row-line {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-row-best {
   color: var(--text-faint);
-}
-
-.how-to[open] summary::after {
-  content: ' \25B4';
-}
-
-.how-to p {
-  margin: 10px 0 0;
-  line-height: 1.55;
-}
-
-.how-to b {
-  color: var(--text);
 }
 
 /* --- toast ---------------------------------------------------------------- */

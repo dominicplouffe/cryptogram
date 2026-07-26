@@ -34,64 +34,62 @@
           <h1 class="home-title">Plouffe Word Games</h1>
           <p class="home-date" id="home-date"></p>
         </div>
-        <button class="icon-btn" id="btn-home-stats" type="button" aria-label="Statistics">
+
+        <!-- The streak is the strongest reason to come back, so it lives in the
+             header rather than in a tile that scrolls away. -->
+        <button class="streak-pill" id="btn-streak" type="button">
+          <svg class="flame" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M13.5 2c.4 3 2.2 3.7 3.3 5.4A7 7 0 1 1 6 12c0-2.5 1.4-4.1 2.6-5.3.2 1.8.9 2.7 1.7 2.7.9 0 1.4-.8 1.2-2C11.2 5.7 12.3 3.4 13.5 2z"
+            />
+          </svg>
+          <span id="home-streak">0</span>
+        </button>
+
+        <button class="icon-btn" id="btn-settings" type="button" aria-label="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 20V10M12 20V4M19 20v-6" />
+            <path d="M4 7h16M4 12h16M4 17h16" />
+            <circle cx="9" cy="7" r="2.2" />
+            <circle cx="15" cy="12" r="2.2" />
+            <circle cx="9" cy="17" r="2.2" />
           </svg>
         </button>
       </header>
 
-      <dl class="home-stats">
-        <div>
-          <dt>Daily streak</dt>
-          <dd id="home-streak">0</dd>
+      <!-- Today: one dot per game, filled as its daily is finished. A meter
+           rather than a tally, so a growing library never reads as "0 of 14". -->
+      <section class="today" aria-labelledby="today-head">
+        <div class="today-top">
+          <h2 class="home-section" id="today-head">Today</h2>
+          <span class="today-count" id="today-count"></span>
         </div>
-        <div>
-          <dt>Solved</dt>
-          <dd id="home-solved">0</dd>
-        </div>
-        <div>
-          <dt>Today</dt>
-          <dd id="home-today">0/3</dd>
-        </div>
-      </dl>
+        <ol class="dots" id="today-dots" aria-hidden="true"></ol>
+        <p class="today-note" id="today-note"></p>
+      </section>
 
-      <h2 class="home-section">Games</h2>
+      <!-- Appears once there are enough games to be worth filtering. -->
+      <div class="chips" id="chips" role="group" aria-label="Filter by kind" hidden></div>
 
-      <!-- Cards are generated from src/games/registry.js, so adding a game needs
-           no change here. -->
-      <ul class="games" id="games"></ul>
+      <!-- Rows are generated from src/games/registry.js and sorted into these
+           three groups by today's state, so adding a game needs no change here. -->
+      <div id="games">
+        <section class="group" id="sec-resume" hidden>
+          <h2 class="home-section">Pick up where you left off</h2>
+          <ul class="rows" id="list-resume"></ul>
+        </section>
 
-      <details class="how-to">
-        <summary>How to play</summary>
-        <p>
-          <b>Cryptogram.</b> Every letter has been swapped for another one,
-          consistently, all the way through the quote. Tap a coded letter, then tap
-          the letter you think it stands for &mdash; every copy updates at once.
-          Start with the short words: a one-letter word is almost always
-          <b>A</b> or <b>I</b>, and the most common letter is usually <b>E</b>.
-        </p>
-        <p>
-          <b>Fiver.</b> Guess a five-letter word in six tries. After each guess,
-          green means the letter is in the right place, amber means it is in the
-          word but somewhere else, and grey means it is not in the word at all.
-        </p>
-        <p>
-          <b>Missing Vowels.</b> Every A, E, I, O and U has been taken out of a
-          quote. Put them back. Y is left alone.
-        </p>
-        <p class="muted">
-          Your daily streak counts consecutive days you finish at least one daily
-          puzzle. Free play does not count toward it.
-        </p>
-      </details>
+        <section class="group" id="sec-open" hidden>
+          <h2 class="home-section" id="open-head">Today's puzzles</h2>
+          <ul class="rows" id="list-open"></ul>
+        </section>
 
-      <h2 class="home-section">Appearance</h2>
-      <div class="segmented" id="seg-theme" role="group" aria-label="Theme">
-        <button class="seg" type="button" data-theme="auto">Auto</button>
-        <button class="seg" type="button" data-theme="dark">Dark</button>
-        <button class="seg" type="button" data-theme="light">Light</button>
+        <details class="group group-done" id="sec-done" hidden>
+          <summary id="done-head">Finished today</summary>
+          <ul class="rows" id="list-done"></ul>
+        </details>
       </div>
+
+      <button class="home-foot" id="home-foot" type="button"></button>
     </div>
 
     <!-- ================================================================
@@ -167,6 +165,56 @@
       </div>
     </dialog>
 
+    <!-- ================================================================
+         Per-game sheet: everything about one game that does not belong on the
+         home screen. One sheet serves every game, so the library can grow
+         without the home screen growing with it.
+         ================================================================ -->
+    <dialog class="sheet" id="dlg-game" aria-labelledby="gs-name">
+      <div class="gs-head">
+        <span class="game-mark" id="gs-mark" aria-hidden="true"></span>
+        <div class="gs-head-text">
+          <h2 class="gs-name" id="gs-name"></h2>
+          <p class="game-blurb" id="gs-blurb"></p>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="card-row-text">
+          <span class="row-label">Today's puzzle</span>
+          <span class="row-status" id="gs-status"></span>
+        </div>
+        <button class="btn btn-primary btn-compact" id="gs-play" type="button">Play</button>
+      </div>
+
+      <div class="card-row card-row-stack" id="gs-diff-row" hidden>
+        <div class="card-row-text">
+          <span class="row-label">Difficulty</span>
+          <span class="row-status">Applies to today's puzzle and to free play.</span>
+        </div>
+        <div class="segmented segmented-sm" id="gs-difficulty" role="group" aria-label="Difficulty"></div>
+        <p class="hint-text" id="gs-note"></p>
+      </div>
+
+      <div class="card-row card-row-stack">
+        <div class="card-row-text">
+          <span class="row-label">Free play</span>
+          <span class="row-status">A fresh puzzle any time. Does not count toward your streak.</span>
+        </div>
+        <button class="btn btn-compact btn-block" id="gs-free" type="button">New puzzle</button>
+      </div>
+
+      <h3 class="sheet-subtitle">How to play</h3>
+      <div class="gs-howto" id="gs-howto"></div>
+
+      <h3 class="sheet-subtitle">Your record</h3>
+      <div id="gs-record"></div>
+
+      <div class="sheet-actions">
+        <button class="btn btn-primary" id="gs-close" type="button">Done</button>
+      </div>
+    </dialog>
+
     <!-- Stats -->
     <dialog class="sheet" id="dlg-stats" aria-labelledby="stats-title">
       <h2 class="sheet-title" id="stats-title">Statistics</h2>
@@ -176,11 +224,44 @@
         <div><dt>Solved</dt><dd id="stat-total">0</dd></div>
       </dl>
 
-      <div id="stats-games"></div>
+      <h3 class="sheet-subtitle">By game</h3>
+      <!-- One compact row per game rather than a block each, so this stays
+           readable at a dozen games. -->
+      <ul class="stat-rows" id="stats-games"></ul>
 
       <div class="sheet-actions">
-        <button class="btn" id="btn-reset-stats" type="button">Reset stats</button>
         <button class="btn btn-primary" id="btn-stats-close" type="button">Done</button>
+      </div>
+    </dialog>
+
+    <!-- Settings -->
+    <dialog class="sheet" id="dlg-settings" aria-labelledby="settings-title">
+      <h2 class="sheet-title" id="settings-title">Settings</h2>
+
+      <h3 class="sheet-subtitle">Appearance</h3>
+      <div class="segmented" id="seg-theme" role="group" aria-label="Theme">
+        <button class="seg" type="button" data-theme="auto">Auto</button>
+        <button class="seg" type="button" data-theme="dark">Dark</button>
+        <button class="seg" type="button" data-theme="light">Light</button>
+      </div>
+
+      <h3 class="sheet-subtitle">Streaks</h3>
+      <p class="hint-text">
+        Your daily streak counts consecutive days you finish at least one daily
+        puzzle, in any game. Free play never advances it. Best times only count
+        hint-free solves.
+      </p>
+
+      <h3 class="sheet-subtitle">Data</h3>
+      <p class="hint-text">
+        Everything is stored on this device only. Nothing is sent anywhere.
+      </p>
+      <button class="btn btn-block" id="btn-reset-stats" type="button">
+        Reset all statistics
+      </button>
+
+      <div class="sheet-actions">
+        <button class="btn btn-primary" id="btn-settings-close" type="button">Done</button>
       </div>
     </dialog>
 

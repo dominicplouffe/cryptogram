@@ -294,16 +294,6 @@ export function pruneOldProgress(today = localDateKey()) {
   }
 }
 
-/**
- * How many games have their daily solved today, for the home screen's "Today"
- * figure. Reads storage directly rather than building boards.
- * @param {string[]} gameIds
- * @param {string} [today]
- */
-export function dailiesSolvedToday(gameIds, today = localDateKey()) {
-  return gameIds.filter((id) => loadProgress(id, 'daily', today)?.solved === true).length;
-}
-
 export function resetAllStats(gameIds) {
   for (const id of gameIds) removeKey(`${NS}${id}.stats`);
   removeKey(`${NS}global`);

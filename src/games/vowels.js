@@ -68,6 +68,7 @@ export const vowels = {
   id: 'vowels',
   name: 'Missing Vowels',
   blurb: 'Put the vowels back into the quote.',
+  category: 'Quotes',
   // Rings rather than blocks, with the middle one hollow: a row of vowels with
   // one taken out. Deliberately unlike Cryptogram's cells, which read almost
   // identically at icon size.
@@ -85,6 +86,13 @@ export const vowels = {
   difficultyNotes: DIFFICULTY_NOTES,
   tools: ['hint', 'check', 'reset', 'new'],
   keyboard: { rows: VOWEL_ROWS, del: true },
+
+  howTo: [
+    'Every A, E, I, O and U has been taken out of a quote. Put them back.',
+    'Y is left alone, so RHYTHM and MYTH arrive intact.',
+    'Tap a blank and choose a vowel from the five-key pad.',
+    'Word shape and the consonants around a gap usually settle it: T_ST is TEST far more often than anything else.',
+  ],
 
   // --- construction ---------------------------------------------------------
 

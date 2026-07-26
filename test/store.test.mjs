@@ -314,21 +314,6 @@ test('pruneOldProgress drops previous days across every game but keeps today and
   }
 });
 
-test('dailiesSolvedToday counts only solved boards for today', () => {
-  reset();
-  const ids = ['cryptogram', 'fiver', 'vowels'];
-  assert.equal(store.dailiesSolvedToday(ids, '2026-08-01'), 0);
-
-  store.saveProgress('cryptogram', { mode: 'daily', dateKey: '2026-08-01', solved: true });
-  store.saveProgress('fiver', { mode: 'daily', dateKey: '2026-08-01', solved: false });
-  store.saveProgress('vowels', { mode: 'daily', dateKey: '2026-07-31', solved: true });
-
-  assert.equal(store.dailiesSolvedToday(ids, '2026-08-01'), 1, 'in-progress and yesterday do not count');
-
-  store.saveProgress('fiver', { mode: 'daily', dateKey: '2026-08-01', solved: true });
-  assert.equal(store.dailiesSolvedToday(ids, '2026-08-01'), 2);
-});
-
 test('resetAllStats clears every game and the site-wide record', () => {
   reset();
   store.recordSolve('cryptogram', RESULT());

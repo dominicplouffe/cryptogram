@@ -72,6 +72,7 @@ export const fiver = {
   id: 'fiver',
   name: 'Fiver',
   blurb: 'Find the five-letter word in six guesses.',
+  category: 'Guessing',
   icon: `<svg viewBox="0 0 512 512">
       <rect x="52" y="112" width="118" height="118" rx="20" />
       <rect x="197" y="112" width="118" height="118" rx="20" class="dim" />
@@ -86,6 +87,13 @@ export const fiver = {
   defaultDifficulty: null,
   tools: ['new'],
   keyboard: { rows: QWERTY_ROWS, del: true, enter: true },
+
+  howTo: [
+    'Guess a five-letter word in six tries. Type it in and press Enter.',
+    'Green means the letter is in the right place. Amber means it is in the word but somewhere else. Grey means it is not in the word at all.',
+    'A green tile also carries a dot and an amber one a ring, so the result reads without relying on colour.',
+    'Any real five-letter word is accepted as a guess, but the answer is always a reasonably common one.',
+  ],
 
   // --- construction ---------------------------------------------------------
 

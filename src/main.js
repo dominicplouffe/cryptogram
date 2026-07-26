@@ -5,11 +5,16 @@
 
 import { localDateKey } from './cipher.js';
 import { validateQuotes } from './quotes.js';
-import { GAMES, GAME_IDS, gameById } from './games/registry.js';
+import {
+  CATEGORIES,
+  FILTER_THRESHOLD,
+  GAMES,
+  GAME_IDS,
+  gameById,
+} from './games/registry.js';
 import { buildKeyboard, burstConfetti } from './render.js';
 import {
   clearProgress,
-  dailiesSolvedToday,
   effectiveStreak,
   formatTime,
   loadAppSettings,
@@ -36,6 +41,11 @@ const dom = {
   viewGame: $('view-game'),
   homeDate: $('home-date'),
   games: $('games'),
+  chips: $('chips'),
+
+  // The three groups a game row can sit in, keyed by bucket name.
+  lists: { resume: $('list-resume'), open: $('list-open'), done: $('list-done') },
+  sections: { resume: $('sec-resume'), open: $('sec-open'), done: $('sec-done') },
 
   puzzle: $('puzzle'),
   caption: $('caption'),
@@ -52,6 +62,8 @@ const dom = {
 
   dlgWin: $('dlg-win'),
   dlgStats: $('dlg-stats'),
+  dlgGame: $('dlg-game'),
+  dlgSettings: $('dlg-settings'),
 };
 
 let appSettings = loadAppSettings();
@@ -61,6 +73,16 @@ let view = 'home';
 let active = null;
 let keys = null;
 let keyboardOwner = null; // which game's layout is currently built
+
+/** Home rows, built once and moved between groups as their state changes. */
+const rowEls = new Map();
+
+/** Which category the home list is filtered to, or 'all'. Not persisted: this is
+    a browsing state, not a preference. */
+let filter = 'all';
+
+/** The game whose sheet is open. */
+let sheetGame = null;
 
 let runningSince = null;
 let tickHandle = null;
@@ -340,58 +362,102 @@ function goHome() {
 }
 
 // --- home screen ------------------------------------------------------------
+//
+// The home screen is a list of compact rows, one per game, sorted into three
+// groups by today's state: in progress, not started, finished. The groups
+// reorder themselves as you play, so the top of the list is always what to do
+// next and the list shortens as the day goes on.
+//
+// Everything else about a game -- its rules, its difficulty, free play, its
+// record -- lives in a per-game sheet. That is what lets the library grow: N
+// games cost N rows here, not N cards' worth of controls.
 
-/** Build one card per registered game. Adding a game needs no HTML change. */
+/** Today's daily state for a game, as the home row and the game sheet show it. */
+function todayStatus(mod, today = localDateKey()) {
+  const settings = settingsFor(mod);
+  const label = mod.difficulties ? mod.difficulties[settings.difficulty].label : '';
+  const snapshot = loadProgress(mod.id, 'daily', today);
+  // A board saved at another difficulty is not today's puzzle as configured.
+  const usable = snapshot && (snapshot.difficulty ?? null) === (settings.difficulty ?? null);
+  return { ...mod.statusFor(usable ? snapshot : null, { difficultyLabel: label }), settings };
+}
+
+/**
+ * A game the player has never opened. Tapping it shows the rules before the
+ * board -- worth a tap for something you have never seen, and skipped entirely
+ * for a game you already know.
+ */
+function isUntried(mod, status) {
+  return loadStats(mod.id).played === 0 && status.state === 'new';
+}
+
+/**
+ * Whether New badges would mean anything.
+ *
+ * A badge marks an exception, so it only earns its place when untried games are
+ * a minority: on a fresh install everything is new, and a batch of nine added at
+ * once is a wall of blue that says nothing about any one of them.
+ *
+ * @param {number} untried
+ * @param {number} total
+ */
+function badgesAreMeaningful(untried, total) {
+  return untried > 0 && untried < total && untried <= Math.max(1, Math.floor(total / 3));
+}
+
+/** Build one row per registered game. Adding a game needs no HTML change. */
 function buildHome() {
-  dom.games.textContent = '';
+  buildChips();
+  rowEls.clear();
 
   for (const mod of GAMES) {
-    const card = document.createElement('li');
-    card.className = 'game-card';
-    card.dataset.game = mod.id;
-
-    const difficultyControl = mod.difficulties
-      ? `<div class="segmented segmented-sm" data-role="difficulty" role="group" aria-label="${mod.name} difficulty">
-           ${Object.entries(mod.difficulties)
-             .map(([key, d]) => `<button class="seg" type="button" data-difficulty="${key}">${d.label}</button>`)
-             .join('')}
-         </div>
-         <p class="hint-text" data-role="note"></p>`
-      : '';
-
-    card.innerHTML = `
-      <div class="game-head">
-        <span class="game-mark" aria-hidden="true">${mod.icon}</span>
-        <div class="game-titles">
-          <h3 class="game-name">${mod.name}</h3>
-          <p class="game-blurb">${mod.blurb}</p>
-        </div>
-      </div>
-
-      <div class="card-row">
-        <div class="card-row-text">
-          <span class="row-label">Daily puzzle</span>
-          <span class="row-status" data-role="status">Not started</span>
-        </div>
-        <button class="btn btn-primary btn-compact" data-role="play-daily" type="button">Play</button>
-      </div>
-
-      <div class="card-row card-row-stack">
-        <div class="card-row-text">
-          <span class="row-label">Free play</span>
-          <span class="row-status">A fresh puzzle any time</span>
-        </div>
-        ${difficultyControl}
-        <button class="btn btn-compact btn-block" data-role="play-free" type="button">New puzzle</button>
-      </div>`;
-
-    dom.games.appendChild(card);
+    const row = document.createElement('li');
+    row.className = 'game-row';
+    row.dataset.game = mod.id;
+    row.innerHTML = `
+      <button class="row-main" data-role="open" type="button">
+        <span class="row-mark" aria-hidden="true">${mod.icon}</span>
+        <span class="row-text">
+          <span class="row-name">
+            ${mod.name}<span class="pill-new" data-role="new" hidden>New</span>
+          </span>
+          <span class="row-status" data-role="status"></span>
+        </span>
+        <span class="row-action" data-role="action"></span>
+      </button>
+      <button class="row-more" data-role="more" type="button" aria-label="${mod.name} details">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.9" />
+          <circle cx="12" cy="12" r="1.9" />
+          <circle cx="19" cy="12" r="1.9" />
+        </svg>
+      </button>`;
+    rowEls.set(mod.id, row);
   }
+}
+
+/**
+ * Category filters, but only once there are enough games to need them. Below the
+ * threshold the whole library fits on a screen and a filter is one more thing to
+ * read past.
+ */
+function buildChips() {
+  const wanted = GAMES.length >= FILTER_THRESHOLD && CATEGORIES.length > 1;
+  dom.chips.hidden = !wanted;
+  if (!wanted) return;
+
+  dom.chips.innerHTML = ['all', ...CATEGORIES]
+    .map(
+      (key) =>
+        `<button class="chip" type="button" data-filter="${key}">${key === 'all' ? 'All' : key}</button>`
+    )
+    .join('');
 }
 
 function paintHome() {
   const today = localDateKey();
   const global = loadGlobal();
+  const streak = effectiveStreak(global, today);
 
   dom.homeDate.textContent = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -399,39 +465,178 @@ function paintHome() {
     day: 'numeric',
   });
 
-  $('home-streak').textContent = String(effectiveStreak(global, today));
-  $('home-solved').textContent = String(global.totalSolved);
-  $('home-today').textContent = `${dailiesSolvedToday(GAME_IDS, today)}/${GAMES.length}`;
+  const pill = $('btn-streak');
+  $('home-streak').textContent = String(streak);
+  pill.classList.toggle('is-cold', streak === 0);
+  pill.setAttribute(
+    'aria-label',
+    streak === 0 ? 'Statistics. No current streak' : `Statistics. ${streak} day streak`
+  );
 
-  for (const mod of GAMES) {
-    const card = dom.games.querySelector(`[data-game="${mod.id}"]`);
-    const settings = settingsFor(mod);
-    const label = mod.difficulties ? mod.difficulties[settings.difficulty].label : '';
+  // Read every game's state first: whether a New badge means anything depends on
+  // how many of them are untried.
+  const entries = GAMES.map((mod) => ({ mod, status: todayStatus(mod, today) }));
+  const untried = entries.filter(({ mod, status }) => isUntried(mod, status)).length;
+  const badges = badgesAreMeaningful(untried, entries.length);
 
-    const snapshot = loadProgress(mod.id, 'daily', today);
-    // A board saved at another difficulty is not today's puzzle as configured.
-    const usable = snapshot && (snapshot.difficulty ?? null) === (settings.difficulty ?? null);
-    const status = mod.statusFor(usable ? snapshot : null, { difficultyLabel: label });
+  const buckets = { resume: [], open: [], done: [] };
+  const states = [];
+  let solvedToday = 0;
 
-    const statusEl = card.querySelector('[data-role="status"]');
-    statusEl.textContent = status.text;
-    statusEl.classList.toggle('is-progress', status.state === 'progress');
-    statusEl.classList.toggle('is-solved', status.state === 'solved');
-    statusEl.classList.toggle('is-lost', status.state === 'lost');
-    card.querySelector('[data-role="play-daily"]').textContent = status.action;
+  for (const { mod, status } of entries) {
+    paintRow(mod, status, badges);
 
-    if (mod.difficulties) {
-      for (const btn of card.querySelectorAll('[data-role="difficulty"] .seg')) {
-        btn.setAttribute('aria-pressed', String(btn.dataset.difficulty === settings.difficulty));
-      }
-      card.querySelector('[data-role="note"]').textContent =
-        mod.difficultyNotes?.[settings.difficulty] ?? '';
-    }
+    states.push(status.state);
+    if (status.state === 'solved') solvedToday += 1;
+
+    const bucket =
+      status.state === 'progress' ? 'resume' : status.state === 'new' ? 'open' : 'done';
+    if (filter === 'all' || mod.category === filter) buckets[bucket].push(mod.id);
   }
 
-  for (const btn of document.querySelectorAll('#seg-theme .seg')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.theme === appSettings.theme));
+  // Rows are moved rather than rebuilt, so nothing is thrown away on a repaint.
+  for (const [name, ids] of Object.entries(buckets)) {
+    const list = dom.lists[name];
+    list.textContent = '';
+    for (const id of ids) list.appendChild(rowEls.get(id));
+    dom.sections[name].hidden = ids.length === 0;
   }
+
+  // With nothing in progress, "Today's puzzles" is the only heading that makes
+  // sense; with something in progress, the two headings divide the list.
+  $('open-head').textContent = buckets.resume.length ? 'Also today' : "Today's puzzles";
+  $('done-head').textContent = `Finished today · ${buckets.done.length}`;
+
+  paintTodayMeter(states, solvedToday, streak);
+  paintChips();
+
+  $('home-foot').textContent =
+    global.totalSolved === 0
+      ? 'No puzzles solved yet'
+      : `${global.totalSolved} solved all time · best streak ${global.maxStreak}`;
+}
+
+function paintRow(mod, status, badges) {
+  const row = rowEls.get(mod.id);
+
+  const statusEl = row.querySelector('[data-role="status"]');
+  statusEl.textContent = status.text;
+  statusEl.classList.toggle('is-progress', status.state === 'progress');
+  statusEl.classList.toggle('is-solved', status.state === 'solved');
+  statusEl.classList.toggle('is-lost', status.state === 'lost');
+
+  row.querySelector('[data-role="action"]').textContent = status.action;
+  row.querySelector('[data-role="new"]').hidden = !badges || !isUntried(mod, status);
+}
+
+/**
+ * The dot meter always covers every game, whatever the list is filtered to:
+ * it reports the day, not the current view.
+ */
+function paintTodayMeter(states, solvedToday, streak) {
+  const dots = $('today-dots');
+  dots.textContent = '';
+  for (const state of states) {
+    const dot = document.createElement('li');
+    if (state !== 'new') dot.className = `is-${state}`;
+    dots.appendChild(dot);
+  }
+
+  $('today-count').textContent = `${solvedToday} of ${GAMES.length} done`;
+
+  let note = '';
+  if (solvedToday === 0) {
+    note =
+      streak > 0
+        ? `Solve any daily to keep your ${streak}-day streak going.`
+        : 'Solve any daily to start a streak.';
+  } else if (solvedToday === GAMES.length) {
+    note = 'Every daily done. Free play is still open.';
+  }
+  $('today-note').textContent = note;
+}
+
+function paintChips() {
+  for (const chip of dom.chips.querySelectorAll('.chip')) {
+    chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter));
+  }
+}
+
+// --- per-game sheet ---------------------------------------------------------
+
+function openGameSheet(mod) {
+  sheetGame = mod;
+  paintGameSheet();
+  openDialog(dom.dlgGame);
+}
+
+function paintGameSheet() {
+  const mod = sheetGame;
+  if (!mod) return;
+
+  const status = todayStatus(mod);
+
+  $('gs-mark').innerHTML = mod.icon;
+  $('gs-name').textContent = mod.name;
+  $('gs-blurb').textContent = mod.blurb;
+
+  const statusEl = $('gs-status');
+  statusEl.textContent = status.text;
+  statusEl.classList.toggle('is-progress', status.state === 'progress');
+  statusEl.classList.toggle('is-solved', status.state === 'solved');
+  statusEl.classList.toggle('is-lost', status.state === 'lost');
+  $('gs-play').textContent = status.action;
+
+  $('gs-diff-row').hidden = !mod.difficulties;
+  if (mod.difficulties) {
+    $('gs-difficulty').innerHTML = Object.entries(mod.difficulties)
+      .map(
+        ([key, d]) =>
+          `<button class="seg" type="button" data-difficulty="${key}"
+             aria-pressed="${key === status.settings.difficulty}">${d.label}</button>`
+      )
+      .join('');
+    $('gs-note').textContent = mod.difficultyNotes?.[status.settings.difficulty] ?? '';
+  }
+
+  // textContent per line: the rules are plain prose, never markup.
+  const howTo = $('gs-howto');
+  howTo.textContent = '';
+  for (const line of mod.howTo ?? []) {
+    const p = document.createElement('p');
+    p.textContent = line;
+    howTo.appendChild(p);
+  }
+
+  $('gs-record').innerHTML = recordMarkup(mod);
+}
+
+/** A best time, or an em dash when nothing hint-free has been recorded yet. */
+function bestTime(stats, band) {
+  const ms = stats.bestTimes[band];
+  return ms == null ? '—' : formatTime(ms);
+}
+
+/** One game's full record: counters, then a best time per difficulty band. */
+function recordMarkup(mod) {
+  const stats = loadStats(mod.id);
+  const rate = stats.played === 0 ? 0 : Math.round((stats.solved / stats.played) * 100);
+  const bands = mod.difficulties
+    ? Object.entries(mod.difficulties).map(([key, d]) => [d.label, key])
+    : [['Best time', 'default']];
+
+  return `
+    <dl class="stat-grid">
+      <div><dt>Played</dt><dd>${stats.played}</dd></div>
+      <div><dt>Solved</dt><dd>${stats.solved}</dd></div>
+      <div><dt>Streak</dt><dd>${effectiveStreak(stats)}</dd></div>
+    </dl>
+    <dl class="stat-grid stat-grid-sm">
+      <div><dt>Win rate</dt><dd>${rate}%</dd></div>
+      ${bands
+        .map(([label, band]) => `<div><dt>${label}</dt><dd>${bestTime(stats, band)}</dd></div>`)
+        .join('')}
+    </dl>`;
 }
 
 // --- stats sheet ------------------------------------------------------------
@@ -445,30 +650,40 @@ function paintStats() {
   const host = $('stats-games');
   host.textContent = '';
 
+  // Two lines per game rather than a block each: this has to stay readable at a
+  // dozen games, and the per-game sheet is where the detail lives.
   for (const mod of GAMES) {
     const stats = loadStats(mod.id);
     const rate = stats.played === 0 ? 0 : Math.round((stats.solved / stats.played) * 100);
 
-    const bands = mod.difficulties
-      ? Object.entries(mod.difficulties).map(([key, d]) => [d.label, stats.bestTimes[key]])
-      : [['Best', stats.bestTimes.default]];
+    const counts =
+      stats.played === 0
+        ? 'Not played yet'
+        : `${stats.solved} of ${stats.played} solved · ${rate}% · streak ${effectiveStreak(stats)}`;
 
-    const section = document.createElement('section');
-    section.className = 'stats-game';
-    section.innerHTML = `
-      <h3 class="sheet-subtitle">${mod.name}</h3>
-      <dl class="stat-grid">
-        <div><dt>Played</dt><dd>${stats.played}</dd></div>
-        <div><dt>Solved</dt><dd>${stats.solved}</dd></div>
-        <div><dt>Win rate</dt><dd>${rate}%</dd></div>
-      </dl>
-      <dl class="stat-grid stat-grid-sm">
-        <div><dt>Streak</dt><dd>${effectiveStreak(stats)}</dd></div>
-        ${bands
-          .map(([label, ms]) => `<div><dt>${label}</dt><dd>${ms == null ? '—' : formatTime(ms)}</dd></div>`)
-          .join('')}
-      </dl>`;
-    host.appendChild(section);
+    // A game with difficulty bands needs them named; one without would otherwise
+    // read "Best: Best —".
+    const best = mod.difficulties
+      ? `Best: ${Object.entries(mod.difficulties)
+          .map(([key, d]) => `${d.label} ${bestTime(stats, key)}`)
+          .join(' · ')}`
+      : `Best time: ${bestTime(stats, 'default')}`;
+
+    const item = document.createElement('li');
+    item.className = 'stat-row';
+    item.innerHTML =
+      `<span class="stat-row-name">${mod.name}</span>` +
+      `<span class="stat-row-line">${counts}</span>` +
+      `<span class="stat-row-line stat-row-best">${best}</span>`;
+    host.appendChild(item);
+  }
+}
+
+// --- settings sheet ---------------------------------------------------------
+
+function paintSettings() {
+  for (const btn of $('seg-theme').querySelectorAll('.seg')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.theme === appSettings.theme));
   }
 }
 
@@ -531,7 +746,8 @@ function wireEvents() {
     openDialog(dom.dlgStats);
   };
   dom.btnStats.addEventListener('click', openStats);
-  $('btn-home-stats').addEventListener('click', openStats);
+  $('btn-streak').addEventListener('click', openStats);
+  $('home-foot').addEventListener('click', openStats);
 
   $('btn-stats-close').addEventListener('click', () => dom.dlgStats.close());
   $('btn-win-home').addEventListener('click', () => {
@@ -543,39 +759,66 @@ function wireEvents() {
     startFresh(active.mod, 'free');
   });
 
-  $('btn-reset-stats').addEventListener('click', () => {
-    if (!window.confirm('Reset all statistics for every game? This cannot be undone.')) return;
-    resetAllStats(GAME_IDS);
-    paintStats();
-    toast('Statistics reset');
-  });
-
-  // Home cards: play, and per-game difficulty.
+  // Home rows: the row plays, the dots button opens the game's sheet.
   dom.games.addEventListener('click', (event) => {
-    const card = event.target.closest('.game-card');
-    if (!card) return;
-    const mod = gameById(card.dataset.game);
+    const row = event.target.closest('.game-row');
+    if (!row) return;
+    const mod = gameById(row.dataset.game);
     if (!mod) return;
 
-    if (event.target.closest('[data-role="play-daily"]')) {
-      openGame(mod, { mode: 'daily' });
+    if (event.target.closest('[data-role="more"]')) {
+      openGameSheet(mod);
       return;
     }
-    if (event.target.closest('[data-role="play-free"]')) {
-      startFresh(mod, 'free');
-      return;
-    }
-
-    const seg = event.target.closest('[data-role="difficulty"] .seg');
-    if (seg) {
-      const settings = settingsFor(mod);
-      if (seg.dataset.difficulty === settings.difficulty) return;
-      settings.difficulty = seg.dataset.difficulty;
-      saveGameSettings(mod.id, settings);
-      // Difficulty reseeds that game's daily, so its card has to be re-read.
-      paintHome();
+    if (event.target.closest('[data-role="open"]')) {
+      if (isUntried(mod, todayStatus(mod))) openGameSheet(mod);
+      else openGame(mod, { mode: 'daily' });
     }
   });
+
+  dom.chips.addEventListener('click', (event) => {
+    const chip = event.target.closest('.chip');
+    if (!chip || chip.dataset.filter === filter) return;
+    filter = chip.dataset.filter;
+    paintHome();
+  });
+
+  // --- per-game sheet ---
+  $('gs-play').addEventListener('click', () => {
+    const mod = sheetGame;
+    dom.dlgGame.close();
+    openGame(mod, { mode: 'daily' });
+  });
+
+  $('gs-free').addEventListener('click', () => {
+    const mod = sheetGame;
+    dom.dlgGame.close();
+    startFresh(mod, 'free');
+  });
+
+  $('gs-difficulty').addEventListener('click', (event) => {
+    const seg = event.target.closest('.seg');
+    if (!seg || !sheetGame) return;
+
+    const settings = settingsFor(sheetGame);
+    if (seg.dataset.difficulty === settings.difficulty) return;
+    settings.difficulty = seg.dataset.difficulty;
+    saveGameSettings(sheetGame.id, settings);
+    // Difficulty reseeds this game's daily, so both the sheet and the row behind
+    // it have to be re-read.
+    paintGameSheet();
+    paintHome();
+  });
+
+  $('gs-close').addEventListener('click', () => dom.dlgGame.close());
+
+  // --- settings sheet ---
+  $('btn-settings').addEventListener('click', () => {
+    paintSettings();
+    openDialog(dom.dlgSettings);
+  });
+
+  $('btn-settings-close').addEventListener('click', () => dom.dlgSettings.close());
 
   $('seg-theme').addEventListener('click', (event) => {
     const btn = event.target.closest('.seg');
@@ -583,10 +826,17 @@ function wireEvents() {
     appSettings.theme = btn.dataset.theme;
     saveAppSettings(appSettings);
     applyTheme();
-    paintHome();
+    paintSettings();
   });
 
-  for (const dialog of [dom.dlgWin, dom.dlgStats]) {
+  $('btn-reset-stats').addEventListener('click', () => {
+    if (!window.confirm('Reset all statistics for every game? This cannot be undone.')) return;
+    resetAllStats(GAME_IDS);
+    paintHome();
+    toast('Statistics reset');
+  });
+
+  for (const dialog of [dom.dlgWin, dom.dlgStats, dom.dlgGame, dom.dlgSettings]) {
     // Tapping the backdrop closes. The dialog fills the sheet, so a click landing
     // directly on it means the backdrop was hit.
     dialog.addEventListener('click', (event) => {

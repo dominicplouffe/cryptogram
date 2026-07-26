@@ -16,7 +16,7 @@ const GAMES = [cryptogram, fiver, vowels];
 
 test('every game satisfies the module contract', () => {
   const required = [
-    'id', 'name', 'blurb', 'icon', 'tools', 'keyboard',
+    'id', 'name', 'blurb', 'category', 'icon', 'howTo', 'tools', 'keyboard',
     'createGame', 'hydrate', 'toSnapshot', 'mount', 'paint', 'paintKeys',
     'onKey', 'onSelect', 'move', 'clearTransient',
     'isSolved', 'isLost', 'caption', 'outcomeContent', 'statusFor',
@@ -42,6 +42,25 @@ test('every game satisfies the module contract', () => {
 test('game ids are unique', () => {
   const ids = GAMES.map((g) => g.id);
   assert.equal(new Set(ids).size, ids.length);
+});
+
+test('every game carries rules the sheet can render', () => {
+  // The per-game sheet is the only place the rules appear, so a game that ships
+  // without them ships unexplained. Rendered with textContent, hence no markup.
+  for (const mod of GAMES) {
+    assert.ok(mod.howTo.length >= 2, `${mod.id} needs at least two lines of rules`);
+    for (const line of mod.howTo) {
+      assert.equal(typeof line, 'string', `${mod.id}: a rule line is not a string`);
+      assert.ok(line.length > 20, `${mod.id}: "${line}" is too short to be a rule`);
+      assert.ok(!/[<>]/.test(line), `${mod.id}: rules are plain prose, not markup`);
+    }
+  }
+});
+
+test('category labels are short enough for a filter chip', () => {
+  for (const mod of GAMES) {
+    assert.match(mod.category, /^[A-Z][A-Za-z ]{2,11}$/, `${mod.id}.category`);
+  }
 });
 
 test('a board built by any game round-trips through its snapshot', () => {

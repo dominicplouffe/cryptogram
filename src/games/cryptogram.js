@@ -79,6 +79,7 @@ export const cryptogram = {
   id: 'cryptogram',
   name: 'Cryptogram',
   blurb: 'Decode the quote, one letter at a time.',
+  category: 'Quotes',
   icon: `<svg viewBox="0 0 512 512">
       <rect x="61" y="159" width="102" height="128" rx="18" />
       <rect x="61" y="317" width="102" height="28" rx="14" />
@@ -92,6 +93,13 @@ export const cryptogram = {
   difficultyNotes: DIFFICULTY_NOTES,
   tools: ['hint', 'check', 'reset', 'new'],
   keyboard: { rows: QWERTY_ROWS, del: true },
+
+  howTo: [
+    'Every letter has been swapped for another one, consistently, all the way through the quote.',
+    'Tap a coded letter, then tap the letter you think it stands for. Every copy of that code updates at once.',
+    'Start with the short words. A one-letter word is almost always A or I, and the most common letter is usually E.',
+    'A letter you have used for two different codes turns amber. The cipher is one-to-one, so one of the two must be wrong.',
+  ],
 
   // --- construction ---------------------------------------------------------
 
