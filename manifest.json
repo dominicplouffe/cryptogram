@@ -1,7 +1,7 @@
 {
-  "name": "Cryptogram",
-  "short_name": "Cryptogram",
-  "description": "Decode the quote, one letter at a time.",
+  "name": "Plouffe Word Games",
+  "short_name": "Plouffe Games",
+  "description": "Word puzzles for your phone. Cryptogram, with a daily puzzle and streaks.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

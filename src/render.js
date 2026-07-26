@@ -20,9 +20,9 @@ const DELETE_ICON =
  */
 function metricsFor(length) {
   if (length <= 55) return { cell: 26, font: 20, code: 11 };
-  if (length <= 80) return { cell: 23, font: 18, code: 10 };
-  if (length <= 110) return { cell: 20, font: 16, code: 9 };
-  return { cell: 18, font: 15, code: 9 };
+  if (length <= 80) return { cell: 22, font: 18, code: 10 };
+  if (length <= 105) return { cell: 19, font: 16, code: 9 };
+  return { cell: 17, font: 15, code: 9 };
 }
 
 /**

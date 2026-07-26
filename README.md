@@ -1,10 +1,14 @@
-# Cryptogram
+# Plouffe Word Games
 
-A mobile-first cryptogram puzzle game. Every letter in a quote has been swapped
-for another one, consistently, all the way through. Tap a coded letter, tap what
-you think it stands for, and every copy updates at once.
+Word puzzles for the phone. Static site: no dependencies, no build step, no
+backend.
 
-Static site. No dependencies, no build step, no backend.
+**Cryptogram** — every letter in a quote has been swapped for another one,
+consistently, all the way through. Tap a coded letter, tap what you think it
+stands for, and every copy updates at once.
+
+The home screen is a games list, so a second game is a second entry rather than
+a redesign.
 
 ## Play locally
 
@@ -24,6 +28,16 @@ npm test           # node --test, no dependencies
 Covers the cipher engine (derangements, determinism, round-tripping) and the
 game state (streaks, best times, difficulty prefill, save/restore).
 
+## Home screen
+
+Opens to a hub showing your streak, puzzles solved, and best time, plus a card
+per game. The daily card reports today's state — not started, in progress with a
+letter count, or solved with the time — and its button follows suit (Play /
+Continue / View). No puzzle is built until you tap one, which keeps the "played"
+count honest: opening the app is not playing.
+
+The phone's back gesture returns to the home screen instead of leaving the app.
+
 ## How it plays
 
 - **Tap a cell** to select it. Every cell sharing that coded letter lights up.
@@ -31,8 +45,8 @@ game state (streaks, best times, difficulty prefill, save/restore).
 - **Amber** means you have used one letter for two different codes. The cipher is
   one-to-one, so one of them is wrong. Revealed letters are never flagged.
 - **Hint** reveals the selected letter and locks it. **Check** flags wrong guesses.
-- **Daily** is seeded from the local calendar date: the same puzzle all day, on
-  every device, and it rolls over at your midnight.
+- **Daily** is seeded from the local calendar date and the chosen difficulty: the
+  same puzzle all day, on every device, rolling over at your midnight.
 - **Best times** count only hint-free solves, so the record stays meaningful.
 
 Difficulty controls both quote length and how many letters are given away:
@@ -41,7 +55,7 @@ Easy prefills about a third, Medium about a sixth, Hard gives you nothing.
 ## Layout
 
 ```
-index.html          app shell
+index.html          home + game views
 styles.css          mobile-first, dark + light
 manifest.json       PWA metadata
 sw.js               offline cache
@@ -49,7 +63,7 @@ src/cipher.js       seeded RNG, derangements, substitution
 src/quotes.js       the quote pack
 src/state.js        game state, difficulty, localStorage
 src/render.js       grid + keyboard DOM
-src/main.js         input handling, timer, game flow
+src/main.js         views, input handling, timer, game flow
 test/               node --test suites
 tools/make-icons.mjs regenerates the PNG icons
 ```

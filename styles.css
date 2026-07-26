@@ -149,6 +149,208 @@ svg {
   padding-right: var(--safe-r);
 }
 
+.app[hidden] {
+  display: none;
+}
+
+/* --- home ----------------------------------------------------------------- */
+
+.home {
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: calc(var(--safe-t) + 18px) 16px calc(var(--safe-b) + 28px);
+  padding-left: max(16px, var(--safe-l));
+  padding-right: max(16px, var(--safe-r));
+}
+
+.home[hidden] {
+  display: none;
+}
+
+.home-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.home-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.home-date {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 26px;
+}
+
+.home-stats div {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 6px;
+  text-align: center;
+}
+
+.home-stats dt {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-weight: 700;
+}
+
+.home-stats dd {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-section {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+
+.games {
+  list-style: none;
+  margin: 0 0 26px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.game-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.game-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-mark {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  background: var(--bg-sunken);
+  display: grid;
+  place-items: center;
+}
+
+.game-mark svg {
+  width: 30px;
+  height: 30px;
+  fill: var(--accent);
+  stroke: none;
+}
+
+.game-mark svg .dim {
+  fill: var(--text-faint);
+}
+
+.game-titles {
+  min-width: 0;
+}
+
+.game-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.game-blurb {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.card-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.card-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-label {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.row-status {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.row-status.is-progress {
+  color: var(--warn);
+}
+
+.row-status.is-solved {
+  color: var(--locked);
+}
+
+.btn-compact {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 14.5px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.segmented-sm .seg {
+  min-height: 38px;
+  font-size: 13px;
+}
+
+/* --- game frame ----------------------------------------------------------- */
+
 .topbar {
   display: flex;
   align-items: center;
@@ -224,7 +426,10 @@ svg {
   flex-wrap: wrap;
   justify-content: center;
   align-content: center;
-  gap: 16px 9px;
+
+  /* Row gap dominates total height once a quote runs to 7-8 lines, so it is
+     deliberately tight. The column gap is the space between words. */
+  gap: 14px 8px;
 
   /* Long-press on a cell should never pop the text-selection menu. */
   user-select: none;
@@ -653,9 +858,11 @@ svg {
 }
 
 .how-to {
-  margin-top: 22px;
-  border-top: 1px solid var(--line);
-  padding-top: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 13px 15px;
+  margin: 0 0 26px;
   font-size: 14px;
   color: var(--text-dim);
 }
@@ -762,10 +969,15 @@ svg {
   }
 }
 
-/* Very short screens: reclaim vertical space from the keyboard and toolbar. */
+/* Very short screens: reclaim vertical space from the keyboard, toolbar and
+   the gaps between puzzle rows. A long quote on a 568px-tall phone is the
+   tightest case the layout has to handle. */
 @media (max-height: 620px) {
   .key { height: 40px; }
   .tool-btn { min-height: 38px; padding: 4px 2px; }
   .author { margin-top: 12px; }
-  .stage { padding: 10px 8px; }
+  .stage { padding: 10px 6px; }
+  .puzzle { gap: 9px 7px; }
+  .cell-guess { height: calc(var(--cell-font) * 1.35); }
+  .cell-code { margin-top: 1px; }
 }

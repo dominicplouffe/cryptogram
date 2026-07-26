@@ -8,6 +8,8 @@ import {
   createGame,
   effectiveStreak,
   formatTime,
+  hydrateGame,
+  loadProgress,
   loadSettings,
   loadStats,
   pruneOldProgress,
@@ -30,6 +32,10 @@ import {
 const $ = (id) => document.getElementById(id);
 
 const dom = {
+  viewHome: $('view-home'),
+  viewGame: $('view-game'),
+  homeDate: $('home-date'),
+
   puzzle: $('puzzle'),
   author: $('author'),
   stage: document.querySelector('.stage'),
@@ -43,12 +49,11 @@ const dom = {
   btnCheck: $('btn-check'),
   btnClear: $('btn-clear'),
   btnNew: $('btn-new'),
-  btnMenu: $('btn-menu'),
+  btnHome: $('btn-home'),
   btnStats: $('btn-stats'),
 
   dlgWin: $('dlg-win'),
   dlgStats: $('dlg-stats'),
-  dlgMenu: $('dlg-menu'),
 };
 
 const DIFFICULTY_NOTES = {
@@ -63,6 +68,7 @@ let game = null;
 let cells = [];
 let keys = null;
 
+let view = 'home';
 let selectedIndex = null;
 let letterIndices = [];
 let wrongLetters = new Set();
@@ -105,11 +111,14 @@ function anyDialogOpen() {
 }
 
 function syncTimerToVisibility() {
-  if (document.visibilityState === 'hidden' || anyDialogOpen() || game?.solved) {
-    pauseTimer();
-  } else {
-    startTimer();
-  }
+  const shouldPause =
+    document.visibilityState === 'hidden' ||
+    anyDialogOpen() ||
+    view !== 'game' ||
+    !game ||
+    game.solved;
+  if (shouldPause) pauseTimer();
+  else startTimer();
 }
 
 // --- persistence ------------------------------------------------------------
@@ -324,19 +333,26 @@ function showWin() {
 
 // --- game lifecycle ---------------------------------------------------------
 
-function loadGame({ fresh = false } = {}) {
+function loadGame({ fresh = false, mode = settings.mode } = {}) {
   const dateKey = localDateKey();
 
+  if (settings.mode !== mode) {
+    settings.mode = mode;
+    saveSettings(settings);
+  }
+
   if (fresh) {
-    game = createGame({ mode: settings.mode, difficulty: settings.difficulty, dateKey });
+    game = createGame({ mode, difficulty: settings.difficulty, dateKey });
     stats = recordStart(stats);
   } else {
     const { game: loaded, restored } = resumeOrCreate({
-      mode: settings.mode,
+      mode,
       difficulty: settings.difficulty,
       dateKey,
     });
     game = loaded;
+    // Only a genuinely new board counts as a play, so returning to an
+    // in-progress puzzle never inflates the count.
     if (!restored) stats = recordStart(stats);
   }
 
@@ -354,6 +370,10 @@ function loadGame({ fresh = false } = {}) {
   selectedIndex = game.solved ? null : nextOpenIndex(letterIndices[letterIndices.length - 1]);
 
   cells = buildPuzzle(dom.puzzle, game);
+  // A history entry per game entry makes the phone's back gesture return to
+  // home rather than leaving the app entirely.
+  if (view !== 'game') history.pushState({ view: 'game' }, '');
+  showView('game');
   dom.stage.scrollTop = 0;
 
   refresh();
@@ -369,21 +389,109 @@ function loadGame({ fresh = false } = {}) {
   }
 }
 
+/** Start a fresh free-play puzzle, discarding any unfinished free-play board. */
+function startFreePuzzle() {
+  clearProgress('free', localDateKey());
+  loadGame({ fresh: true, mode: 'free' });
+}
+
+/** The in-game "New" button. Daily is one puzzle a day, so it moves to free play. */
 function startNewPuzzle() {
-  // Daily is one puzzle per day by definition, so "New" moves into free play.
-  if (settings.mode === 'daily') {
-    settings.mode = 'free';
-    saveSettings(settings);
-    syncMenuButtons();
-  } else {
-    clearProgress('free', localDateKey());
+  startFreePuzzle();
+}
+
+// --- views ------------------------------------------------------------------
+
+function showView(next) {
+  view = next;
+  dom.viewHome.hidden = next !== 'home';
+  dom.viewGame.hidden = next !== 'game';
+
+  if (next === 'home') {
+    persist();
+    paintHome();
+    window.scrollTo(0, 0);
   }
-  loadGame({ fresh: true });
+  syncTimerToVisibility();
+}
+
+function goHome() {
+  // Unwind the history entry pushed on entering the game so the back gesture
+  // and this button stay in step; popstate performs the actual switch.
+  if (history.state?.view === 'game') {
+    history.back();
+    return;
+  }
+  // Committing progress before leaving means a hard close from the home screen
+  // still comes back to the right board.
+  persist();
+  showView('home');
+}
+
+/**
+ * State of today's daily puzzle, read straight from storage so the home screen
+ * never has to build a game (which would inflate the "played" count).
+ * @returns {{state: 'new'|'progress'|'solved', filled?: number, total?: number, elapsedMs?: number}}
+ */
+function dailyStatus() {
+  const saved = loadProgress('daily', localDateKey());
+  // The daily is seeded per difficulty, so a save from another difficulty is
+  // not today's puzzle as currently configured.
+  if (!saved || saved.difficulty !== settings.difficulty) return { state: 'new' };
+  if (saved.solved) return { state: 'solved', elapsedMs: saved.elapsedMs };
+
+  const restored = hydrateGame(saved);
+  const filled = restored.letters.filter((code) => restored.guesses[code]).length;
+  if (filled === restored.locked.size) return { state: 'new' };
+  return { state: 'progress', filled, total: restored.letters.length };
+}
+
+function paintHome() {
+  const label = DIFFICULTIES[settings.difficulty].label;
+
+  dom.homeDate.textContent = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  $('home-streak').textContent = String(effectiveStreak(stats));
+  $('home-solved').textContent = String(stats.solved);
+  $('home-best-label').textContent = `Best · ${label}`;
+  const best = stats.bestTimes[settings.difficulty];
+  $('home-best').textContent = best === null ? '—' : formatTime(best);
+
+  const status = dailyStatus();
+  const statusEl = $('daily-status');
+  statusEl.classList.remove('is-progress', 'is-solved');
+
+  if (status.state === 'solved') {
+    statusEl.textContent = `Solved in ${formatTime(status.elapsedMs)}`;
+    statusEl.classList.add('is-solved');
+    $('btn-play-daily').textContent = 'View';
+  } else if (status.state === 'progress') {
+    statusEl.textContent = `In progress · ${status.filled} of ${status.total} letters`;
+    statusEl.classList.add('is-progress');
+    $('btn-play-daily').textContent = 'Continue';
+  } else {
+    statusEl.textContent = `Not started · ${label}`;
+    $('btn-play-daily').textContent = 'Play';
+  }
+
+  for (const btn of document.querySelectorAll('#home-difficulty .seg')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.difficulty === settings.difficulty));
+  }
+  for (const btn of document.querySelectorAll('#seg-theme .seg')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.theme === settings.theme));
+  }
+  $('difficulty-note').textContent = DIFFICULTY_NOTES[settings.difficulty] ?? '';
 }
 
 // --- painting ---------------------------------------------------------------
 
 function refresh() {
+  if (!game) return;
+
   updatePuzzle(cells, game, { selectedIndex, wrongLetters });
   updateKeyboard(keys, game);
 
@@ -427,20 +535,7 @@ function wireDialog(dialog) {
   dialog.addEventListener('close', syncTimerToVisibility);
 }
 
-// --- menu -------------------------------------------------------------------
-
-function syncMenuButtons() {
-  for (const btn of document.querySelectorAll('#seg-mode .seg')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.mode === settings.mode));
-  }
-  for (const btn of document.querySelectorAll('#seg-difficulty .seg')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.difficulty === settings.difficulty));
-  }
-  for (const btn of document.querySelectorAll('#seg-theme .seg')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.theme === settings.theme));
-  }
-  $('difficulty-note').textContent = DIFFICULTY_NOTES[settings.difficulty] ?? '';
-}
+// --- settings ---------------------------------------------------------------
 
 function applyTheme() {
   if (settings.theme === 'auto') {
@@ -486,18 +581,20 @@ function wireEvents() {
   dom.btnClear.addEventListener('click', resetBoard);
   dom.btnNew.addEventListener('click', startNewPuzzle);
 
-  dom.btnMenu.addEventListener('click', () => {
-    syncMenuButtons();
-    openDialog(dom.dlgMenu);
-  });
-  dom.btnStats.addEventListener('click', () => {
+  dom.btnHome.addEventListener('click', goHome);
+
+  const openStats = () => {
     paintStats();
     openDialog(dom.dlgStats);
-  });
+  };
+  dom.btnStats.addEventListener('click', openStats);
+  $('btn-home-stats').addEventListener('click', openStats);
 
-  $('btn-menu-close').addEventListener('click', () => closeDialog(dom.dlgMenu));
   $('btn-stats-close').addEventListener('click', () => closeDialog(dom.dlgStats));
-  $('btn-win-close').addEventListener('click', () => closeDialog(dom.dlgWin));
+  $('btn-win-home').addEventListener('click', () => {
+    closeDialog(dom.dlgWin);
+    goHome();
+  });
   $('btn-win-next').addEventListener('click', () => {
     closeDialog(dom.dlgWin);
     startNewPuzzle();
@@ -511,22 +608,17 @@ function wireEvents() {
     toast('Statistics reset');
   });
 
-  $('seg-mode').addEventListener('click', (event) => {
-    const btn = event.target.closest('.seg');
-    if (!btn || btn.dataset.mode === settings.mode) return;
-    settings.mode = btn.dataset.mode;
-    saveSettings(settings);
-    syncMenuButtons();
-    loadGame();
-  });
+  // --- home controls ---
+  $('btn-play-daily').addEventListener('click', () => loadGame({ mode: 'daily' }));
+  $('btn-play-free').addEventListener('click', startFreePuzzle);
 
-  $('seg-difficulty').addEventListener('click', (event) => {
+  $('home-difficulty').addEventListener('click', (event) => {
     const btn = event.target.closest('.seg');
     if (!btn || btn.dataset.difficulty === settings.difficulty) return;
     settings.difficulty = btn.dataset.difficulty;
     saveSettings(settings);
-    syncMenuButtons();
-    loadGame();
+    // Difficulty reseeds the daily, so the card's status has to be re-read.
+    paintHome();
   });
 
   $('seg-theme').addEventListener('click', (event) => {
@@ -535,14 +627,16 @@ function wireEvents() {
     settings.theme = btn.dataset.theme;
     saveSettings(settings);
     applyTheme();
-    syncMenuButtons();
+    paintHome();
   });
 
-  [dom.dlgWin, dom.dlgStats, dom.dlgMenu].forEach(wireDialog);
+  [dom.dlgWin, dom.dlgStats].forEach(wireDialog);
 
   // Physical keyboard, mostly for desktop play and testing.
   document.addEventListener('keydown', (event) => {
-    if (anyDialogOpen() || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (view !== 'game' || anyDialogOpen() || event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
 
     if (/^[a-zA-Z]$/.test(event.key)) {
       event.preventDefault();
@@ -567,6 +661,12 @@ function wireEvents() {
   // pagehide is the reliable "app is going away" signal on iOS, where
   // beforeunload frequently never fires.
   window.addEventListener('pagehide', persist);
+
+  window.addEventListener('popstate', () => {
+    if (view !== 'game') return;
+    persist();
+    showView('home');
+  });
 }
 
 // --- boot -------------------------------------------------------------------
@@ -577,8 +677,10 @@ function boot() {
 
   keys = buildKeyboard(dom.keyboard);
   wireEvents();
-  loadGame();
-  syncMenuButtons();
+
+  // Land on home. No game is built until a card is tapped, which also keeps the
+  // "played" count honest -- opening the app is not playing a puzzle.
+  showView('home');
 
   if (!storageAvailable()) {
     toast('Private mode: progress will not be saved');

@@ -4,7 +4,7 @@
 // so once it is cached there is no reason to hit the network at all. Bump
 // CACHE_VERSION on release to retire the old shell.
 
-const CACHE_VERSION = 'cryptogram-v1';
+const CACHE_VERSION = 'plouffe-word-games-v2';
 
 // Relative paths so the worker also works from a GitHub Pages subdirectory.
 const SHELL = [

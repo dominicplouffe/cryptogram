@@ -8,15 +8,15 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
     />
-    <meta name="description" content="A cryptogram puzzle game. Decode the quote, one letter at a time." />
+    <meta name="description" content="Plouffe Word Games. Word puzzles for your phone." />
     <meta name="theme-color" content="#12141c" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Cryptogram" />
+    <meta name="apple-mobile-web-app-title" content="Plouffe Games" />
 
-    <title>Cryptogram</title>
+    <title>Plouffe Word Games</title>
 
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
@@ -25,11 +25,122 @@
   </head>
 
   <body>
-    <div class="app">
-      <header class="topbar">
-        <button class="icon-btn" id="btn-menu" type="button" aria-label="Menu">
+    <!-- ================================================================
+         Home
+         ================================================================ -->
+    <div class="home" id="view-home">
+      <header class="home-header">
+        <div class="home-titles">
+          <h1 class="home-title">Plouffe Word Games</h1>
+          <p class="home-date" id="home-date"></p>
+        </div>
+        <button class="icon-btn" id="btn-home-stats" type="button" aria-label="Statistics">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h16M4 12h16M4 17h16" />
+            <path d="M5 20V10M12 20V4M19 20v-6" />
+          </svg>
+        </button>
+      </header>
+
+      <dl class="home-stats">
+        <div>
+          <dt>Streak</dt>
+          <dd id="home-streak">0</dd>
+        </div>
+        <div>
+          <dt>Solved</dt>
+          <dd id="home-solved">0</dd>
+        </div>
+        <div>
+          <dt id="home-best-label">Best</dt>
+          <dd id="home-best">&mdash;</dd>
+        </div>
+      </dl>
+
+      <h2 class="home-section">Games</h2>
+
+      <!-- One <li> per game. A second game is a second <li> with the same
+           structure -- nothing here is specific to there being only one. -->
+      <ul class="games">
+        <li class="game-card">
+          <div class="game-head">
+            <span class="game-mark" aria-hidden="true">
+              <svg viewBox="0 0 512 512">
+                <rect x="61" y="159" width="102" height="128" rx="18" />
+                <rect x="61" y="317" width="102" height="28" rx="14" />
+                <rect x="205" y="317" width="102" height="28" rx="14" class="dim" />
+                <rect x="349" y="159" width="102" height="128" rx="18" />
+                <rect x="349" y="317" width="102" height="28" rx="14" />
+              </svg>
+            </span>
+            <div class="game-titles">
+              <h3 class="game-name">Cryptogram</h3>
+              <p class="game-blurb">Decode the quote, one letter at a time.</p>
+            </div>
+          </div>
+
+          <div class="card-row">
+            <div class="card-row-text">
+              <span class="row-label">Daily puzzle</span>
+              <span class="row-status" id="daily-status">Not started</span>
+            </div>
+            <button class="btn btn-primary btn-compact" id="btn-play-daily" type="button">
+              Play
+            </button>
+          </div>
+
+          <div class="card-row card-row-stack">
+            <div class="card-row-text">
+              <span class="row-label">Free play</span>
+              <span class="row-status" id="free-status">A fresh puzzle any time</span>
+            </div>
+            <div class="segmented segmented-sm" id="home-difficulty" role="group" aria-label="Difficulty">
+              <button class="seg" type="button" data-difficulty="easy">Easy</button>
+              <button class="seg" type="button" data-difficulty="medium">Medium</button>
+              <button class="seg" type="button" data-difficulty="hard">Hard</button>
+            </div>
+            <p class="hint-text" id="difficulty-note"></p>
+            <button class="btn btn-compact btn-block" id="btn-play-free" type="button">
+              New puzzle
+            </button>
+          </div>
+        </li>
+      </ul>
+
+      <details class="how-to">
+        <summary>How to play Cryptogram</summary>
+        <p>
+          Every letter has been swapped for another one, consistently, all the way
+          through the quote. Tap a coded letter, then tap the letter you think it
+          stands for &mdash; every copy of it updates at once.
+        </p>
+        <p>
+          Start with the short words. A one-letter word is almost always
+          <b>A</b> or <b>I</b>. The most common letter is usually <b>E</b>. Look for
+          <b>THE</b>, and for a letter after an apostrophe &mdash; that is usually
+          <b>S</b> or <b>T</b>.
+        </p>
+        <p class="muted">
+          Amber means you have used the same letter twice. Since no two coded
+          letters share an answer, one of them is wrong.
+        </p>
+      </details>
+
+      <h2 class="home-section">Appearance</h2>
+      <div class="segmented" id="seg-theme" role="group" aria-label="Theme">
+        <button class="seg" type="button" data-theme="auto">Auto</button>
+        <button class="seg" type="button" data-theme="dark">Dark</button>
+        <button class="seg" type="button" data-theme="light">Light</button>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         Game
+         ================================================================ -->
+    <div class="app" id="view-game" hidden>
+      <header class="topbar">
+        <button class="icon-btn" id="btn-home" type="button" aria-label="Back to home">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
 
@@ -90,7 +201,7 @@
       <p class="win-note" id="win-note"></p>
       <div class="sheet-actions">
         <button class="btn btn-primary" id="btn-win-next" type="button">Next puzzle</button>
-        <button class="btn" id="btn-win-close" type="button">Close</button>
+        <button class="btn" id="btn-win-home" type="button">Home</button>
       </div>
     </dialog>
 
@@ -114,55 +225,6 @@
       <div class="sheet-actions">
         <button class="btn" id="btn-reset-stats" type="button">Reset stats</button>
         <button class="btn btn-primary" id="btn-stats-close" type="button">Done</button>
-      </div>
-    </dialog>
-
-    <!-- Menu -->
-    <dialog class="sheet" id="dlg-menu" aria-labelledby="menu-title">
-      <h2 class="sheet-title" id="menu-title">Cryptogram</h2>
-
-      <h3 class="sheet-subtitle">Mode</h3>
-      <div class="segmented" id="seg-mode" role="group" aria-label="Game mode">
-        <button class="seg" type="button" data-mode="daily">Daily</button>
-        <button class="seg" type="button" data-mode="free">Free play</button>
-      </div>
-
-      <h3 class="sheet-subtitle">Difficulty</h3>
-      <div class="segmented" id="seg-difficulty" role="group" aria-label="Difficulty">
-        <button class="seg" type="button" data-difficulty="easy">Easy</button>
-        <button class="seg" type="button" data-difficulty="medium">Medium</button>
-        <button class="seg" type="button" data-difficulty="hard">Hard</button>
-      </div>
-      <p class="hint-text" id="difficulty-note"></p>
-
-      <h3 class="sheet-subtitle">Theme</h3>
-      <div class="segmented" id="seg-theme" role="group" aria-label="Theme">
-        <button class="seg" type="button" data-theme="auto">Auto</button>
-        <button class="seg" type="button" data-theme="dark">Dark</button>
-        <button class="seg" type="button" data-theme="light">Light</button>
-      </div>
-
-      <details class="how-to">
-        <summary>How to play</summary>
-        <p>
-          Every letter has been swapped for another one, consistently, all the way
-          through the quote. Tap a coded letter, then tap the letter you think it
-          stands for &mdash; every copy of it updates at once.
-        </p>
-        <p>
-          Start with the short words. A one-letter word is almost always
-          <b>A</b> or <b>I</b>. The most common letter is usually <b>E</b>. Look for
-          <b>THE</b>, and for a letter after an apostrophe &mdash; that is usually
-          <b>S</b> or <b>T</b>.
-        </p>
-        <p class="muted">
-          Amber means you have used the same letter twice. Since no two coded
-          letters share an answer, one of them is wrong.
-        </p>
-      </details>
-
-      <div class="sheet-actions">
-        <button class="btn btn-primary" id="btn-menu-close" type="button">Done</button>
       </div>
     </dialog>
 
