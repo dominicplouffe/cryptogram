@@ -51,77 +51,38 @@
           <dd id="home-solved">0</dd>
         </div>
         <div>
-          <dt id="home-best-label">Best</dt>
-          <dd id="home-best">&mdash;</dd>
+          <dt>Today</dt>
+          <dd id="home-today">0/3</dd>
         </div>
       </dl>
 
       <h2 class="home-section">Games</h2>
 
-      <!-- One <li> per game. A second game is a second <li> with the same
-           structure -- nothing here is specific to there being only one. -->
-      <ul class="games">
-        <li class="game-card">
-          <div class="game-head">
-            <span class="game-mark" aria-hidden="true">
-              <svg viewBox="0 0 512 512">
-                <rect x="61" y="159" width="102" height="128" rx="18" />
-                <rect x="61" y="317" width="102" height="28" rx="14" />
-                <rect x="205" y="317" width="102" height="28" rx="14" class="dim" />
-                <rect x="349" y="159" width="102" height="128" rx="18" />
-                <rect x="349" y="317" width="102" height="28" rx="14" />
-              </svg>
-            </span>
-            <div class="game-titles">
-              <h3 class="game-name">Cryptogram</h3>
-              <p class="game-blurb">Decode the quote, one letter at a time.</p>
-            </div>
-          </div>
-
-          <div class="card-row">
-            <div class="card-row-text">
-              <span class="row-label">Daily puzzle</span>
-              <span class="row-status" id="daily-status">Not started</span>
-            </div>
-            <button class="btn btn-primary btn-compact" id="btn-play-daily" type="button">
-              Play
-            </button>
-          </div>
-
-          <div class="card-row card-row-stack">
-            <div class="card-row-text">
-              <span class="row-label">Free play</span>
-              <span class="row-status" id="free-status">A fresh puzzle any time</span>
-            </div>
-            <div class="segmented segmented-sm" id="home-difficulty" role="group" aria-label="Difficulty">
-              <button class="seg" type="button" data-difficulty="easy">Easy</button>
-              <button class="seg" type="button" data-difficulty="medium">Medium</button>
-              <button class="seg" type="button" data-difficulty="hard">Hard</button>
-            </div>
-            <p class="hint-text" id="difficulty-note"></p>
-            <button class="btn btn-compact btn-block" id="btn-play-free" type="button">
-              New puzzle
-            </button>
-          </div>
-        </li>
-      </ul>
+      <!-- Cards are generated from src/games/registry.js, so adding a game needs
+           no change here. -->
+      <ul class="games" id="games"></ul>
 
       <details class="how-to">
-        <summary>How to play Cryptogram</summary>
+        <summary>How to play</summary>
         <p>
-          Every letter has been swapped for another one, consistently, all the way
-          through the quote. Tap a coded letter, then tap the letter you think it
-          stands for &mdash; every copy of it updates at once.
+          <b>Cryptogram.</b> Every letter has been swapped for another one,
+          consistently, all the way through the quote. Tap a coded letter, then tap
+          the letter you think it stands for &mdash; every copy updates at once.
+          Start with the short words: a one-letter word is almost always
+          <b>A</b> or <b>I</b>, and the most common letter is usually <b>E</b>.
         </p>
         <p>
-          Start with the short words. A one-letter word is almost always
-          <b>A</b> or <b>I</b>. The most common letter is usually <b>E</b>. Look for
-          <b>THE</b>, and for a letter after an apostrophe &mdash; that is usually
-          <b>S</b> or <b>T</b>.
+          <b>Fiver.</b> Guess a five-letter word in six tries. After each guess,
+          green means the letter is in the right place, amber means it is in the
+          word but somewhere else, and grey means it is not in the word at all.
+        </p>
+        <p>
+          <b>Missing Vowels.</b> Every A, E, I, O and U has been taken out of a
+          quote. Put them back. Y is left alone.
         </p>
         <p class="muted">
-          Amber means you have used the same letter twice. Since no two coded
-          letters share an answer, one of them is wrong.
+          Your daily streak counts consecutive days you finish at least one daily
+          puzzle. Free play does not count toward it.
         </p>
       </details>
 
@@ -134,7 +95,7 @@
     </div>
 
     <!-- ================================================================
-         Game
+         Game shell: shared by every game
          ================================================================ -->
     <div class="app" id="view-game" hidden>
       <header class="topbar">
@@ -145,9 +106,9 @@
         </button>
 
         <div class="topbar-center">
-          <span class="mode-label" id="mode-label">Daily</span>
+          <span class="mode-label" id="game-label">Cryptogram</span>
           <span class="topbar-sub">
-            <span id="difficulty-label">Medium</span>
+            <span id="game-sub">Daily</span>
             <span class="dot" aria-hidden="true">&middot;</span>
             <span id="timer" aria-label="Elapsed time">0:00</span>
           </span>
@@ -161,38 +122,39 @@
       </header>
 
       <main class="stage">
-        <div class="puzzle" id="puzzle" role="group" aria-label="Cryptogram puzzle"></div>
-        <p class="author" id="author" aria-live="polite"></p>
+        <div class="puzzle" id="puzzle" role="group" aria-label="Puzzle"></div>
+        <p class="author" id="caption" aria-live="polite"></p>
       </main>
 
+      <!-- Each game declares which of these it uses; the rest are hidden. -->
       <div class="toolbar" id="toolbar">
-        <button class="tool-btn" id="btn-hint" type="button">
+        <button class="tool-btn" data-tool="hint" type="button">
           <span class="tool-icon" aria-hidden="true">&#128161;</span>
           <span class="tool-label">Hint</span>
         </button>
-        <button class="tool-btn" id="btn-check" type="button">
+        <button class="tool-btn" data-tool="check" type="button">
           <span class="tool-icon" aria-hidden="true">&#10003;</span>
           <span class="tool-label">Check</span>
         </button>
-        <button class="tool-btn" id="btn-clear" type="button">
+        <button class="tool-btn" data-tool="reset" type="button">
           <span class="tool-icon" aria-hidden="true">&#8635;</span>
           <span class="tool-label">Reset</span>
         </button>
-        <button class="tool-btn" id="btn-new" type="button">
+        <button class="tool-btn" data-tool="new" type="button">
           <span class="tool-icon" aria-hidden="true">&#9654;</span>
           <span class="tool-label">New</span>
         </button>
       </div>
 
-      <div class="keyboard" id="keyboard" role="group" aria-label="Letter keyboard"></div>
+      <div class="keyboard" id="keyboard" role="group" aria-label="Keyboard"></div>
     </div>
 
-    <!-- Win -->
+    <!-- Outcome -->
     <dialog class="sheet" id="dlg-win" aria-labelledby="win-title">
       <div class="confetti" id="confetti" aria-hidden="true"></div>
       <h2 class="sheet-title" id="win-title">Solved!</h2>
-      <blockquote class="win-quote" id="win-quote"></blockquote>
-      <p class="win-author" id="win-author"></p>
+      <blockquote class="win-quote" id="win-body"></blockquote>
+      <p class="win-author" id="win-caption"></p>
       <dl class="win-stats">
         <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
         <div><dt>Hints</dt><dd id="win-hints">0</dd></div>
@@ -200,7 +162,7 @@
       </dl>
       <p class="win-note" id="win-note"></p>
       <div class="sheet-actions">
-        <button class="btn btn-primary" id="btn-win-next" type="button">Next puzzle</button>
+        <button class="btn btn-primary" id="btn-win-next" type="button">Play again</button>
         <button class="btn" id="btn-win-home" type="button">Home</button>
       </div>
     </dialog>
@@ -209,19 +171,13 @@
     <dialog class="sheet" id="dlg-stats" aria-labelledby="stats-title">
       <h2 class="sheet-title" id="stats-title">Statistics</h2>
       <dl class="stat-grid">
-        <div><dt>Played</dt><dd id="stat-played">0</dd></div>
-        <div><dt>Solved</dt><dd id="stat-solved">0</dd></div>
-        <div><dt>Win rate</dt><dd id="stat-rate">0%</dd></div>
         <div><dt>Daily streak</dt><dd id="stat-streak">0</dd></div>
         <div><dt>Best streak</dt><dd id="stat-maxstreak">0</dd></div>
-        <div><dt>Hints used</dt><dd id="stat-hints">0</dd></div>
+        <div><dt>Solved</dt><dd id="stat-total">0</dd></div>
       </dl>
-      <h3 class="sheet-subtitle">Best times <span class="muted">(no hints)</span></h3>
-      <dl class="stat-grid stat-grid-3">
-        <div><dt>Easy</dt><dd id="stat-best-easy">&mdash;</dd></div>
-        <div><dt>Medium</dt><dd id="stat-best-medium">&mdash;</dd></div>
-        <div><dt>Hard</dt><dd id="stat-best-hard">&mdash;</dd></div>
-      </dl>
+
+      <div id="stats-games"></div>
+
       <div class="sheet-actions">
         <button class="btn" id="btn-reset-stats" type="button">Reset stats</button>
         <button class="btn btn-primary" id="btn-stats-close" type="button">Done</button>

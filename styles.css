@@ -90,6 +90,13 @@
   box-sizing: border-box;
 }
 
+/* The hidden attribute only sets display:none at the very bottom of the cascade,
+   so any class that sets display beats it. Several here do (.tool-btn is flex,
+   .app is flex), which silently made hidden elements visible. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -276,6 +283,13 @@ svg {
   fill: var(--text-faint);
 }
 
+/* A hollow shape, for "this one is missing". */
+.game-mark svg .ring {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 26;
+}
+
 .game-titles {
   min-width: 0;
 }
@@ -331,6 +345,10 @@ svg {
 
 .row-status.is-solved {
   color: var(--locked);
+}
+
+.row-status.is-lost {
+  color: var(--error);
 }
 
 .btn-compact {
@@ -451,7 +469,7 @@ svg {
   -webkit-tap-highlight-color: transparent;
 }
 
-.cell-guess {
+.cell-value {
   display: grid;
   place-items: center;
 
@@ -469,7 +487,7 @@ svg {
   transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.cell-code {
+.cell-sub {
   font-size: var(--code-font);
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -478,52 +496,64 @@ svg {
   transition: color 0.12s ease;
 }
 
+/* Missing Vowels has nothing to show under each cell, so that row collapses
+   rather than reserving vertical space. Set by buildQuoteGrid. */
+.puzzle.no-sub .cell-sub {
+  display: none;
+}
+
+/* Only the blanks carry an underline here, so words do not read as continuous
+   runs the way they do in Cryptogram. Wider word gaps restore the grouping. */
+.puzzle.no-sub {
+  column-gap: 15px;
+}
+
 /* Punctuation and spaces: shown, but not playable. */
-.cell.static .cell-guess {
+.cell.static .cell-value {
   border-bottom-color: transparent;
   color: var(--text-dim);
 }
 
 /* Every cell sharing the selected coded letter lights up together. This is the
    core affordance: you see your guess ripple across the whole quote. */
-.cell.peer .cell-guess {
+.cell.peer .cell-value {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   border-bottom-color: var(--accent);
 }
 
-.cell.selected .cell-guess {
+.cell.selected .cell-value {
   background: var(--accent);
   color: var(--accent-ink);
   border-bottom-color: var(--accent);
 }
 
-.cell.peer .cell-code,
-.cell.selected .cell-code {
+.cell.peer .cell-sub,
+.cell.selected .cell-sub {
   color: var(--accent);
 }
 
-.cell.locked .cell-guess {
+.cell.locked .cell-value {
   color: var(--locked);
 }
 
-.cell.locked .cell-code {
+.cell.locked .cell-sub {
   color: color-mix(in srgb, var(--locked) 70%, var(--text-faint));
 }
 
 /* Same letter used for two different codes: one of them must be wrong. */
-.cell.dup .cell-guess {
+.cell.dup .cell-value {
   color: var(--warn);
   border-bottom-color: var(--warn);
 }
 
-.cell.wrong .cell-guess {
+.cell.wrong .cell-value {
   color: var(--error);
   border-bottom-color: var(--error);
   animation: shake 0.3s ease;
 }
 
-.cell.selected.dup .cell-guess,
-.cell.selected.wrong .cell-guess {
+.cell.selected.dup .cell-value,
+.cell.selected.wrong .cell-value {
   color: var(--accent-ink);
 }
 
@@ -531,6 +561,113 @@ svg {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-2px); }
   75% { transform: translateX(2px); }
+}
+
+/* --- Fiver board ---------------------------------------------------------- */
+
+.fiver-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fiver-row {
+  display: flex;
+  gap: 6px;
+}
+
+.tile {
+  /* Square, and sized so six rows plus the keyboard clear a 568px screen. */
+  width: min(56px, 13.5vw);
+  height: min(56px, 13.5vw);
+  display: grid;
+  place-items: center;
+  position: relative;
+  font-size: min(28px, 7vw);
+  font-weight: 700;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tile.tile-filled {
+  border-color: var(--text-faint);
+}
+
+.tile-hit,
+.tile-near,
+.tile-miss {
+  color: #fff;
+  border-color: transparent;
+}
+
+.tile-hit {
+  background: var(--locked);
+}
+
+.tile-near {
+  background: var(--warn);
+}
+
+.tile-miss {
+  background: var(--text-faint);
+}
+
+/* Colour alone excludes colour-blind players, so a committed tile also carries a
+   shape in the corner: a filled dot for the right place, a ring for present
+   elsewhere, nothing for absent. */
+.tile[data-state='hit']::after,
+.tile[data-state='near']::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+}
+
+.tile[data-state='hit']::after {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.fiver-row.shake {
+  animation: shake 0.3s ease;
+}
+
+/* Fiver's keys carry the same vocabulary as its tiles. */
+.key.key-hit {
+  background: var(--locked);
+  color: #fff;
+}
+
+.key.key-near {
+  background: var(--warn);
+  color: #fff;
+}
+
+.key.key-miss {
+  background: var(--bg);
+  color: var(--text-faint);
+  box-shadow: none;
+}
+
+/* A single-row keyboard (the vowel pad) would otherwise stretch each key to a
+   fifth of the screen. */
+.keyboard-wide .krow {
+  max-width: 380px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.keyboard-wide .key {
+  height: 54px;
+  font-size: 20px;
 }
 
 .author {
@@ -780,8 +917,27 @@ svg {
   margin: 20px 0 0;
 }
 
-.stat-grid {
-  grid-template-columns: repeat(3, 1fr);
+.stat-grid-sm {
+  margin-top: 8px;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.stat-grid-sm dd {
+  font-size: 15px;
+}
+
+.stat-grid-sm dt {
+  font-size: 9.5px;
+}
+
+.stats-game + .stats-game {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* A loss is not a celebration: soften the sheet's headline. */
+.sheet-loss .sheet-title {
+  color: var(--error);
 }
 
 .win-stats div,
@@ -978,6 +1134,6 @@ svg {
   .author { margin-top: 12px; }
   .stage { padding: 10px 6px; }
   .puzzle { gap: 9px 7px; }
-  .cell-guess { height: calc(var(--cell-font) * 1.35); }
-  .cell-code { margin-top: 1px; }
+  .cell-value { height: calc(var(--cell-font) * 1.35); }
+  .cell-sub { margin-top: 1px; }
 }

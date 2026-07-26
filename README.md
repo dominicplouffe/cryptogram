@@ -3,12 +3,12 @@
 Word puzzles for the phone. Static site: no dependencies, no build step, no
 backend.
 
-**Cryptogram** — every letter in a quote has been swapped for another one,
-consistently, all the way through. Tap a coded letter, tap what you think it
-stands for, and every copy updates at once.
-
-The home screen is a games list, so a second game is a second entry rather than
-a redesign.
+- **Cryptogram** — a quote encrypted with a one-to-one letter substitution. Tap a
+  coded letter, tap what you think it stands for, and every copy updates at once.
+- **Fiver** — find a five-letter word in six guesses. Green is the right place,
+  amber is in the word but elsewhere, grey is not in the word.
+- **Missing Vowels** — every A, E, I, O and U taken out of a quote. Put them back.
+  Y is left alone.
 
 ## Play locally
 
@@ -25,48 +25,62 @@ because ES modules require HTTP.
 npm test           # node --test, no dependencies
 ```
 
-Covers the cipher engine (derangements, determinism, round-tripping) and the
-game state (streaks, best times, difficulty prefill, save/restore).
+110 tests over the cipher engine, storage and migration, the shared game
+contract, and each game's rules — including the duplicate-letter cases that make
+Fiver's scoring easy to get wrong.
 
 ## Home screen
 
-Opens to a hub showing your streak, puzzles solved, and best time, plus a card
-per game. The daily card reports today's state — not started, in progress with a
-letter count, or solved with the time — and its button follows suit (Play /
-Continue / View). No puzzle is built until you tap one, which keeps the "played"
-count honest: opening the app is not playing.
+A hub showing your daily streak, lifetime solves, and how many of today's dailies
+you have finished. Each game gets a card reporting its own state — not started, in
+progress with a count, solved with a time, or out of guesses — and a button that
+follows suit (Play / Continue / View).
 
-The phone's back gesture returns to the home screen instead of leaving the app.
+No board is built until you tap one, which keeps the played count honest: opening
+the app is not playing. The phone's back gesture returns here rather than leaving.
 
-## How it plays
+**The daily streak counts consecutive days you finish at least one daily, any
+game.** Free play never advances it, and the win sheet says so after a free-play
+solve. Each game also keeps its own streak, visible in the stats sheet.
 
-- **Tap a cell** to select it. Every cell sharing that coded letter lights up.
-- **Tap a letter** to assign it everywhere at once; the selection auto-advances.
-- **Amber** means you have used one letter for two different codes. The cipher is
-  one-to-one, so one of them is wrong. Revealed letters are never flagged.
-- **Hint** reveals the selected letter and locks it. **Check** flags wrong guesses.
-- **Daily** is seeded from the local calendar date and the chosen difficulty: the
-  same puzzle all day, on every device, rolling over at your midnight.
-- **Best times** count only hint-free solves, so the record stays meaningful.
-
-Difficulty controls both quote length and how many letters are given away:
-Easy prefills about a third, Medium about a sixth, Hard gives you nothing.
+Best times only count hint-free solves, so the record stays meaningful.
 
 ## Layout
 
 ```
-index.html          home + game views
-styles.css          mobile-first, dark + light
-manifest.json       PWA metadata
-sw.js               offline cache
-src/cipher.js       seeded RNG, derangements, substitution
-src/quotes.js       the quote pack
-src/state.js        game state, difficulty, localStorage
-src/render.js       grid + keyboard DOM
-src/main.js         views, input handling, timer, game flow
-test/               node --test suites
-tools/make-icons.mjs regenerates the PNG icons
+index.html              home + a game shell shared by all three games
+styles.css              mobile-first, dark + light
+manifest.json           PWA metadata
+sw.js                   offline cache, network-first
+src/main.js             the shell: views, timer, dialogs, wiring
+src/store.js            namespaced storage, per-game stats, streaks, migration
+src/render.js           quote grid + configurable keyboard
+src/cipher.js           seeded RNG, derangements, substitution
+src/quotes.js           the quote pack (shared by Cryptogram and Missing Vowels)
+src/words.js            GENERATED word lists for Fiver
+src/games/registry.js   the list of games that drives everything
+src/games/*.js          one module per game
+test/                   node --test suites
+tools/make-icons.mjs    regenerates the PNG app icons
+tools/make-words.mjs    regenerates src/words.js
 ```
+
+## Adding a game
+
+Write a module in `src/games/` satisfying the same contract as the existing three
+— `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`, `isSolved`,
+`statusFor`, and so on — then add it to `src/games/registry.js`. The home card,
+stats section, "Today n/n" figure, and progress pruning all follow from that list;
+there is no HTML to edit.
+
+Two rules worth knowing:
+
+- **A snapshot stores an identifier, never the puzzle.** Boards are rebuilt from a
+  quote index or answer index plus a seed, so a saved game can never disagree with
+  its own puzzle. There is a test that enforces this.
+- **The shell owns `solved` and `lost`.** A module reports via `isSolved` and
+  `isLost` and must not set the flags itself; the shell uses them to tell a board
+  that has just finished from one that was already finished when opened.
 
 ## Adding your own quotes
 
@@ -79,6 +93,21 @@ Append to the array in `src/quotes.js`:
 Keep it between 20 and 160 characters and ASCII-only — curly quotes, accents and
 em-dashes break cell alignment and have no key on the on-screen keyboard. Running
 on localhost logs a console warning for anything that breaks those rules.
+
+## Word lists
+
+`node tools/make-words.mjs` regenerates `src/words.js` from the system dictionary
+(`wamerican` and `cracklib-runtime` on Debian/Ubuntu). The output is committed, so
+the app never depends on those files being installed.
+
+It produces two lists, and the split matters: **2,267 common words** are the pool
+Fiver draws answers from, while **all 4,667 five-letter words** are accepted as
+guesses. Drawing answers from the full list gives miserable puzzles like `CALKS`;
+accepting only common words makes the game feel broken when a real word is
+rejected. Obscure answers that slip through go in the blocklist in that script.
+
+The lists derive from SCOWL, whose licence permits redistribution provided its
+copyright notice travels along — it is reproduced at the top of `src/words.js`.
 
 ## Icons
 

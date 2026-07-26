@@ -1,10 +1,15 @@
-// DOM construction and updates for the puzzle grid and the on-screen keyboard.
+// Shared DOM construction: the quote-shaped letter grid and the on-screen
+// keyboard.
 //
-// Split into build vs update deliberately: the grid is rebuilt only when the
-// puzzle changes, while updates run on every keystroke and only touch text
-// content and class names.
+// This module builds structure and owns layout metrics. It deliberately does not
+// know any game's rules -- each game module paints its own cells using the
+// elements returned here.
 
-const KEY_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+/** Standard letter layout. Games can pass their own rows instead. */
+export const QWERTY_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+
+/** Missing Vowels only ever needs five keys, so it gets much bigger targets. */
+export const VOWEL_ROWS = ['AEIOU'];
 
 const DELETE_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true">' +
@@ -12,7 +17,7 @@ const DELETE_ICON =
   '<path d="M17 9l-5 6M12 9l5 6"/></svg>';
 
 /**
- * Pick cell metrics that keep the whole quote on screen.
+ * Pick cell metrics that keep a whole quote on screen.
  *
  * Longer quotes get smaller cells. The vw ceiling matters independently: on a
  * 320px phone even a short quote needs narrower cells than the tier suggests.
@@ -26,33 +31,37 @@ function metricsFor(length) {
 }
 
 /**
- * Build the puzzle grid.
+ * Build a quote-shaped grid of cells.
  *
  * Words become flex items so a line break can never land inside one, which
  * matters because word shape is most of what you pattern-match on when solving.
  *
  * @param {HTMLElement} container
- * @param {{cipher: string}} game
- * @returns {Array<HTMLElement|null>} cell element per cipher index (null for spaces)
+ * @param {Array<{space?: boolean, char?: string, sub?: string, editable?: boolean, key?: string}>} cells
+ *   One entry per character of the source text, in order. `space: true` ends the
+ *   current word. `editable` cells are playable; everything else renders static.
+ * @returns {Array<HTMLElement|null>} element per input index, null for spaces
  */
-export function buildPuzzle(container, game) {
+export function buildQuoteGrid(container, cells) {
   container.textContent = '';
 
-  const { cell, font, code } = metricsFor(game.cipher.length);
+  const { cell, font, code } = metricsFor(cells.length);
   // The min() lets narrow screens shrink below the tier without a media query.
   container.style.setProperty('--cell-w', `min(${cell}px, 7.6vw)`);
   container.style.setProperty('--cell-font', `min(${font}px, 5.6vw)`);
   container.style.setProperty('--code-font', `min(${code}px, 3.2vw)`);
 
-  const cells = new Array(game.cipher.length).fill(null);
+  // Missing Vowels has no second line under each cell, so the row that holds it
+  // is collapsed rather than left reserving vertical space on a phone.
+  container.classList.toggle('no-sub', !cells.some((c) => c.sub));
+
+  const out = new Array(cells.length).fill(null);
   let word = null;
 
-  for (let i = 0; i < game.cipher.length; i++) {
-    const ch = game.cipher[i];
-
-    if (ch === ' ') {
-      word = null; // next character starts a new flex item
-      continue;
+  cells.forEach((spec, i) => {
+    if (spec.space) {
+      word = null; // the next character starts a new flex item
+      return;
     }
 
     if (!word) {
@@ -61,80 +70,37 @@ export function buildPuzzle(container, game) {
       container.appendChild(word);
     }
 
-    const isLetter = ch >= 'A' && ch <= 'Z';
-
     const el = document.createElement('span');
-    el.className = isLetter ? 'cell' : 'cell static';
+    el.className = spec.editable ? 'cell' : 'cell static';
     el.dataset.index = String(i);
-    if (isLetter) el.dataset.code = ch;
+    if (spec.editable) el.dataset.key = spec.key ?? String(i);
 
-    const guess = document.createElement('span');
-    guess.className = 'cell-guess';
-    guess.textContent = isLetter ? '' : ch;
+    const value = document.createElement('span');
+    value.className = 'cell-value';
+    value.textContent = spec.editable ? '' : (spec.char ?? '');
 
-    const codeEl = document.createElement('span');
-    codeEl.className = 'cell-code';
-    codeEl.textContent = isLetter ? ch : '';
+    const sub = document.createElement('span');
+    sub.className = 'cell-sub';
+    sub.textContent = spec.sub ?? '';
 
-    el.append(guess, codeEl);
+    el.append(value, sub);
     word.appendChild(el);
-    cells[i] = el;
-  }
+    out[i] = el;
+  });
 
-  return cells;
+  return out;
 }
 
 /**
- * Refresh cell contents and states. Called after every input.
- *
- * @param {Array<HTMLElement|null>} cells
- * @param {object} game
- * @param {{selectedIndex: number|null, wrongLetters: Set<string>}} view
+ * Set a cell's displayed character and its state classes in one call.
+ * @param {HTMLElement} el
+ * @param {string} text
+ * @param {Record<string, boolean>} states class name -> on/off
  */
-export function updatePuzzle(cells, game, view) {
-  const selectedCode =
-    view.selectedIndex === null ? null : game.cipher[view.selectedIndex] ?? null;
-  const duplicates = duplicateLetters(game);
-
-  for (let i = 0; i < cells.length; i++) {
-    const el = cells[i];
-    if (!el || !el.dataset.code) continue;
-
-    const code = el.dataset.code;
-    const guess = game.guesses[code] ?? '';
-    const guessEl = el.firstChild;
-    if (guessEl.textContent !== guess) guessEl.textContent = guess;
-
-    const isLocked = game.locked.has(code);
-
-    el.classList.toggle('selected', i === view.selectedIndex);
-    el.classList.toggle('peer', code === selectedCode && i !== view.selectedIndex);
-    el.classList.toggle('locked', isLocked);
-    // A revealed letter is known-correct, so it never wears the warning colour
-    // even when it collides -- the player's own guess is the wrong one.
-    el.classList.toggle('dup', Boolean(guess) && duplicates.has(guess) && !isLocked);
-    el.classList.toggle('wrong', view.wrongLetters.has(code));
-  }
-}
-
-/**
- * Plaintext letters currently assigned to more than one coded letter.
- *
- * The cipher is one-to-one, so a repeat guarantees at least one is wrong. We
- * flag rather than block: holding two tentative guesses is normal mid-deduction.
- * @param {object} game
- * @returns {Set<string>}
- */
-export function duplicateLetters(game) {
-  const seen = new Map();
-  for (const code of game.letters) {
-    const guess = game.guesses[code];
-    if (!guess) continue;
-    seen.set(guess, (seen.get(guess) ?? 0) + 1);
-  }
-  const dupes = new Set();
-  for (const [letter, count] of seen) if (count > 1) dupes.add(letter);
-  return dupes;
+export function paintCell(el, text, states) {
+  const value = el.firstChild;
+  if (value.textContent !== text) value.textContent = text;
+  for (const [name, on] of Object.entries(states)) el.classList.toggle(name, on);
 }
 
 /**
@@ -142,35 +108,45 @@ export function duplicateLetters(game) {
  *
  * Custom rather than native on purpose: the device keyboard covers half the
  * screen, autocorrects, and emits composition events we would have to unpick.
+ *
  * @param {HTMLElement} container
- * @returns {Map<string, HTMLElement>} letter -> key element
+ * @param {{rows?: string[], del?: boolean, enter?: boolean}} layout
+ * @returns {Map<string, HTMLElement>} key name -> element ('DEL' and 'ENTER' included)
  */
-export function buildKeyboard(container) {
+export function buildKeyboard(container, layout = {}) {
+  const rows = layout.rows ?? QWERTY_ROWS;
+  const wantsDelete = layout.del !== false;
+  const wantsEnter = layout.enter === true;
+
   container.textContent = '';
+  container.classList.toggle('keyboard-wide', rows.length === 1);
   const keys = new Map();
 
-  KEY_ROWS.forEach((letters, rowIndex) => {
+  const addKey = (row, name, { wide = false, label = name, icon = null } = {}) => {
+    const key = document.createElement('button');
+    key.type = 'button';
+    key.className = wide ? 'key wide' : 'key';
+    key.dataset.key = name;
+    if (icon) {
+      key.innerHTML = icon;
+      key.setAttribute('aria-label', label);
+    } else {
+      key.textContent = label;
+    }
+    row.appendChild(key);
+    keys.set(name, key);
+  };
+
+  rows.forEach((letters, rowIndex) => {
     const row = document.createElement('div');
     row.className = 'krow';
+    const isLast = rowIndex === rows.length - 1;
 
-    for (const letter of letters) {
-      const key = document.createElement('button');
-      key.type = 'button';
-      key.className = 'key';
-      key.dataset.key = letter;
-      key.textContent = letter;
-      row.appendChild(key);
-      keys.set(letter, key);
-    }
-
-    if (rowIndex === KEY_ROWS.length - 1) {
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'key wide';
-      del.dataset.key = 'DEL';
-      del.setAttribute('aria-label', 'Delete');
-      del.innerHTML = DELETE_ICON;
-      row.appendChild(del);
+    // ENTER sits left of the last row so DEL keeps its familiar right-hand spot.
+    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'Enter' });
+    for (const letter of letters) addKey(row, letter);
+    if (isLast && wantsDelete) {
+      addKey(row, 'DEL', { wide: true, label: 'Delete', icon: DELETE_ICON });
     }
 
     container.appendChild(row);
@@ -180,19 +156,17 @@ export function buildKeyboard(container) {
 }
 
 /**
- * Dim letters that are already in play, so the remaining alphabet reads at a
- * glance. Locked letters count as used.
+ * Apply per-key state classes.
  * @param {Map<string, HTMLElement>} keys
- * @param {object} game
+ * @param {Record<string, string>} states letter -> class suffix ('used', 'hit', 'near', 'miss')
  */
-export function updateKeyboard(keys, game) {
-  const used = new Set();
-  for (const code of game.letters) {
-    const guess = game.guesses[code];
-    if (guess) used.add(guess);
-  }
-  for (const [letter, el] of keys) {
-    el.classList.toggle('used', used.has(letter));
+export function paintKeyboard(keys, states) {
+  for (const [name, el] of keys) {
+    const state = states[name] ?? '';
+    el.classList.toggle('used', state === 'used');
+    el.classList.toggle('key-hit', state === 'hit');
+    el.classList.toggle('key-near', state === 'near');
+    el.classList.toggle('key-miss', state === 'miss');
   }
 }
 

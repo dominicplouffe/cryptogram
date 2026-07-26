@@ -1,33 +1,33 @@
-// Wiring: input handling, timer, game flow.
+// The app shell: home screen, game view, timer, dialogs, persistence, wiring.
+//
+// Knows nothing about any game's rules. Everything game-specific comes from the
+// modules in src/games/, via the registry.
 
-import { isSolved, localDateKey } from './cipher.js';
+import { localDateKey } from './cipher.js';
 import { validateQuotes } from './quotes.js';
+import { GAMES, GAME_IDS, gameById } from './games/registry.js';
+import { buildKeyboard, burstConfetti } from './render.js';
 import {
-  DIFFICULTIES,
   clearProgress,
-  createGame,
+  dailiesSolvedToday,
   effectiveStreak,
   formatTime,
-  hydrateGame,
+  loadAppSettings,
+  loadGameSettings,
+  loadGlobal,
   loadProgress,
-  loadSettings,
   loadStats,
+  migrateLegacy,
   pruneOldProgress,
+  recordLoss,
   recordSolve,
   recordStart,
-  resetStats,
-  resumeOrCreate,
+  resetAllStats,
+  saveAppSettings,
+  saveGameSettings,
   saveProgress,
-  saveSettings,
   storageAvailable,
-} from './state.js';
-import {
-  buildKeyboard,
-  buildPuzzle,
-  burstConfetti,
-  updateKeyboard,
-  updatePuzzle,
-} from './render.js';
+} from './store.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -35,20 +35,18 @@ const dom = {
   viewHome: $('view-home'),
   viewGame: $('view-game'),
   homeDate: $('home-date'),
+  games: $('games'),
 
   puzzle: $('puzzle'),
-  author: $('author'),
+  caption: $('caption'),
   stage: document.querySelector('.stage'),
   keyboard: $('keyboard'),
+  toolbar: $('toolbar'),
   timer: $('timer'),
-  modeLabel: $('mode-label'),
-  difficultyLabel: $('difficulty-label'),
+  gameLabel: $('game-label'),
+  gameSub: $('game-sub'),
   toast: $('toast'),
 
-  btnHint: $('btn-hint'),
-  btnCheck: $('btn-check'),
-  btnClear: $('btn-clear'),
-  btnNew: $('btn-new'),
   btnHome: $('btn-home'),
   btnStats: $('btn-stats'),
 
@@ -56,45 +54,35 @@ const dom = {
   dlgStats: $('dlg-stats'),
 };
 
-const DIFFICULTY_NOTES = {
-  easy: 'Shorter quotes, with about a third of the letters filled in for you.',
-  medium: 'Medium-length quotes with a couple of letters to start you off.',
-  hard: 'The longest quotes, and nothing given away. Just you and the cipher.',
-};
-
-let settings = loadSettings();
-let stats = loadStats();
-let game = null;
-let cells = [];
-let keys = null;
-
+let appSettings = loadAppSettings();
 let view = 'home';
-let selectedIndex = null;
-let letterIndices = [];
-let wrongLetters = new Set();
-let wrongTimer = null;
-let toastTimer = null;
 
-// Timer: elapsedMs is the committed total; runningSince marks an open interval.
+/** The board on screen: the module, its live state, and its settings. */
+let active = null;
+let keys = null;
+let keyboardOwner = null; // which game's layout is currently built
+
 let runningSince = null;
 let tickHandle = null;
+let toastTimer = null;
+let transientTimer = null;
 
 // --- timer ------------------------------------------------------------------
 
 function currentElapsed() {
-  if (!game) return 0;
-  return game.elapsedMs + (runningSince === null ? 0 : Date.now() - runningSince);
+  if (!active) return 0;
+  return active.game.elapsedMs + (runningSince === null ? 0 : Date.now() - runningSince);
 }
 
 function startTimer() {
-  if (!game || game.solved || runningSince !== null) return;
+  if (!active || active.game.solved || active.game.lost || runningSince !== null) return;
   runningSince = Date.now();
   tickHandle = setInterval(paintTimer, 250);
 }
 
 function pauseTimer() {
   if (runningSince === null) return;
-  game.elapsedMs += Date.now() - runningSince;
+  active.game.elapsedMs += Date.now() - runningSince;
   runningSince = null;
   clearInterval(tickHandle);
   tickHandle = null;
@@ -110,298 +98,219 @@ function anyDialogOpen() {
   return Boolean(document.querySelector('dialog[open]'));
 }
 
-function syncTimerToVisibility() {
-  const shouldPause =
+function syncTimer() {
+  const stop =
     document.visibilityState === 'hidden' ||
     anyDialogOpen() ||
     view !== 'game' ||
-    !game ||
-    game.solved;
-  if (shouldPause) pauseTimer();
+    !active ||
+    active.game.solved ||
+    active.game.lost;
+  if (stop) pauseTimer();
   else startTimer();
 }
 
 // --- persistence ------------------------------------------------------------
 
 function persist() {
-  if (!game) return;
-  const wasRunning = runningSince !== null;
-  if (wasRunning) {
+  if (!active) return;
+  if (runningSince !== null) {
     // Commit the open interval so the saved elapsed time is accurate.
-    game.elapsedMs += Date.now() - runningSince;
+    active.game.elapsedMs += Date.now() - runningSince;
     runningSince = Date.now();
   }
-  saveProgress(game);
+  saveProgress(active.mod.id, active.mod.toSnapshot(active.game));
 }
 
-// --- selection --------------------------------------------------------------
+// --- launching a game -------------------------------------------------------
 
-function isPlayable(index) {
-  const ch = game.cipher[index];
-  return ch >= 'A' && ch <= 'Z';
-}
-
-/** Index of the next cell whose coded letter still needs an answer. */
-function nextOpenIndex(afterIndex) {
-  const start = letterIndices.indexOf(afterIndex);
-  for (let step = 1; step <= letterIndices.length; step++) {
-    const index = letterIndices[(start + step) % letterIndices.length];
-    const code = game.cipher[index];
-    if (!game.locked.has(code) && !game.guesses[code]) return index;
-  }
-  return null;
-}
-
-function selectIndex(index) {
-  if (index === null || !isPlayable(index)) return;
-  selectedIndex = index;
-  refresh();
-}
-
-function moveSelection(direction) {
-  if (selectedIndex === null) return;
-  const at = letterIndices.indexOf(selectedIndex);
-  const next = (at + direction + letterIndices.length) % letterIndices.length;
-  selectIndex(letterIndices[next]);
-}
-
-// --- moves ------------------------------------------------------------------
-
-function assignLetter(letter) {
-  if (!game || game.solved || selectedIndex === null) return;
-  const code = game.cipher[selectedIndex];
-
-  if (game.locked.has(code)) {
-    toast('That letter is already revealed');
-    selectIndex(nextOpenIndex(selectedIndex) ?? selectedIndex);
-    return;
-  }
-
-  game.guesses[code] = letter;
-  wrongLetters.delete(code);
-
-  const advanceTo = nextOpenIndex(selectedIndex);
-  if (advanceTo !== null) selectedIndex = advanceTo;
-
-  refresh();
-  persist();
-  checkForWin();
-}
-
-function deleteLetter() {
-  if (!game || game.solved || selectedIndex === null) return;
-  const code = game.cipher[selectedIndex];
-
-  if (game.locked.has(code)) {
-    toast('Revealed letters cannot be cleared');
-    return;
-  }
-  if (!game.guesses[code]) {
-    // Nothing here: step back so repeated taps walk backwards, like a real
-    // keyboard's backspace.
-    moveSelection(-1);
-    return;
-  }
-
-  delete game.guesses[code];
-  wrongLetters.delete(code);
-  refresh();
-  persist();
-}
-
-function useHint() {
-  if (!game || game.solved) return;
-
-  const openLetters = game.letters.filter((code) => !game.locked.has(code));
-  if (openLetters.length === 0) {
-    toast('Nothing left to reveal');
-    return;
-  }
-
-  // Prefer the selected cell, so a hint answers the question you were asking.
-  const selectedCode = selectedIndex === null ? null : game.cipher[selectedIndex];
-  const code =
-    selectedCode && !game.locked.has(selectedCode)
-      ? selectedCode
-      : openLetters[Math.floor(Math.random() * openLetters.length)];
-
-  game.guesses[code] = game.solution[code];
-  game.locked.add(code);
-  game.hintsUsed += 1;
-  wrongLetters.delete(code);
-
-  const advanceTo = nextOpenIndex(selectedIndex ?? letterIndices[0]);
-  if (advanceTo !== null) selectedIndex = advanceTo;
-
-  refresh();
-  persist();
-  toast(`Revealed ${code} = ${game.solution[code]}`);
-  checkForWin();
-}
-
-function checkMistakes() {
-  if (!game || game.solved) return;
-
-  const wrong = game.letters.filter(
-    (code) => game.guesses[code] && game.guesses[code] !== game.solution[code]
-  );
-
-  game.checksUsed += 1;
-  persist();
-
-  if (wrong.length === 0) {
-    const filled = game.letters.filter((code) => game.guesses[code]).length;
-    toast(filled === 0 ? 'Nothing to check yet' : 'All correct so far');
-    return;
-  }
-
-  wrongLetters = new Set(wrong);
-  refresh();
-  toast(wrong.length === 1 ? '1 letter is wrong' : `${wrong.length} letters are wrong`);
-
-  clearTimeout(wrongTimer);
-  wrongTimer = setTimeout(() => {
-    wrongLetters = new Set();
-    refresh();
-  }, 2200);
-}
-
-function resetBoard() {
-  if (!game || game.solved) return;
-
-  const filled = game.letters.filter(
-    (code) => game.guesses[code] && !game.locked.has(code)
-  );
-  if (filled.length === 0) {
-    toast('Board is already empty');
-    return;
-  }
-  if (!window.confirm(`Clear ${filled.length} letter${filled.length === 1 ? '' : 's'}?`)) {
-    return;
-  }
-
-  for (const code of filled) delete game.guesses[code];
-  wrongLetters = new Set();
-  selectedIndex = nextOpenIndex(letterIndices[letterIndices.length - 1]) ?? letterIndices[0];
-  refresh();
-  persist();
-}
-
-// --- win --------------------------------------------------------------------
-
-function checkForWin() {
-  if (!game || game.solved) return;
-  if (!isSolved(game.cipher, game.guesses, game.solution)) return;
-
-  pauseTimer();
-  game.solved = true;
-  selectedIndex = null;
-  wrongLetters = new Set();
-
-  stats = recordSolve(stats, {
-    mode: game.mode,
-    difficulty: game.difficulty,
-    elapsedMs: game.elapsedMs,
-    hintsUsed: game.hintsUsed,
-    dateKey: game.dateKey,
+function settingsFor(mod) {
+  return loadGameSettings(mod.id, {
+    difficulties: mod.difficulties,
+    defaultDifficulty: mod.defaultDifficulty,
   });
-
-  refresh();
-  persist();
-  showWin();
 }
 
-function showWin() {
-  $('win-quote').textContent = game.original ?? game.plain;
-  $('win-author').textContent = game.author ? `— ${game.author}` : '';
-  $('win-time').textContent = formatTime(game.elapsedMs);
-  $('win-hints').textContent = String(game.hintsUsed);
-  $('win-streak').textContent = String(effectiveStreak(stats));
-
-  const best = stats.bestTimes[game.difficulty];
-  let note = '';
-  if (game.mode === 'free') {
-    // Without this, a run of free-play solves looks like a broken streak
-    // counter rather than a counter measuring something else.
-    note = 'Free play. Solve the Daily to build your streak.';
-  } else if (game.hintsUsed > 0) {
-    note = 'Best times only count hint-free solves.';
-  } else if (best === game.elapsedMs) {
-    note = `New best time for ${DIFFICULTIES[game.difficulty].label}!`;
-  }
-  $('win-note').textContent = note;
-
-  openDialog(dom.dlgWin);
-  burstConfetti($('confetti'));
-}
-
-// --- game lifecycle ---------------------------------------------------------
-
-function loadGame({ fresh = false, mode = settings.mode } = {}) {
+/**
+ * Open a game, resuming a saved board when one matches the current settings.
+ * @param {object} mod
+ * @param {{fresh?: boolean, mode?: string}} options
+ */
+function openGame(mod, { fresh = false, mode } = {}) {
   const dateKey = localDateKey();
+  const settings = settingsFor(mod);
+  const resolvedMode = mode ?? settings.mode;
 
-  if (settings.mode !== mode) {
-    settings.mode = mode;
-    saveSettings(settings);
+  if (settings.mode !== resolvedMode) {
+    settings.mode = resolvedMode;
+    saveGameSettings(mod.id, settings);
   }
 
+  let game;
   if (fresh) {
-    game = createGame({ mode, difficulty: settings.difficulty, dateKey });
-    stats = recordStart(stats);
+    game = mod.createGame({ mode: resolvedMode, difficulty: settings.difficulty, dateKey });
+    recordStart(mod.id);
   } else {
-    const { game: loaded, restored } = resumeOrCreate({
-      mode,
-      difficulty: settings.difficulty,
-      dateKey,
-    });
-    game = loaded;
-    // Only a genuinely new board counts as a play, so returning to an
-    // in-progress puzzle never inflates the count.
-    if (!restored) stats = recordStart(stats);
+    const saved = loadProgress(mod.id, resolvedMode, dateKey);
+    // A saved board at a different difficulty is stale once the player switches.
+    const usable = saved && (saved.difficulty ?? null) === (settings.difficulty ?? null);
+    if (usable) {
+      game = mod.hydrate(saved);
+    } else {
+      game = mod.createGame({ mode: resolvedMode, difficulty: settings.difficulty, dateKey });
+      // Only a genuinely new board counts as a play, so returning to one in
+      // progress never inflates the count.
+      recordStart(mod.id);
+    }
   }
 
-  letterIndices = [];
-  for (let i = 0; i < game.cipher.length; i++) {
-    if (isPlayable(i)) letterIndices.push(i);
+  active = { mod, game, settings };
+
+  // Rebuild the keyboard only when moving between games with different layouts.
+  if (keyboardOwner !== mod.id) {
+    keys = buildKeyboard(dom.keyboard, mod.keyboard);
+    keyboardOwner = mod.id;
   }
 
-  wrongLetters = new Set();
-  clearTimeout(wrongTimer);
+  for (const btn of dom.toolbar.querySelectorAll('[data-tool]')) {
+    btn.hidden = !mod.tools.includes(btn.dataset.tool);
+  }
+
+  clearTimeout(transientTimer);
   runningSince = null;
   clearInterval(tickHandle);
   tickHandle = null;
 
-  selectedIndex = game.solved ? null : nextOpenIndex(letterIndices[letterIndices.length - 1]);
+  mod.mount(dom.puzzle, game);
 
-  cells = buildPuzzle(dom.puzzle, game);
-  // A history entry per game entry makes the phone's back gesture return to
-  // home rather than leaving the app entirely.
+  // A history entry per game entry makes the phone's back gesture return to home
+  // rather than leaving the app entirely.
   if (view !== 'game') history.pushState({ view: 'game' }, '');
   showView('game');
   dom.stage.scrollTop = 0;
 
-  refresh();
+  paintGame();
   persist();
-  syncTimerToVisibility();
+  syncTimer();
 
-  if (game.solved) {
-    toast(
-      game.mode === 'daily'
-        ? "Today's puzzle is already solved"
-        : 'This puzzle is already solved'
-    );
+  if (game.solved) toast('Already solved — here it is');
+  else if (game.lost) toast('Out of guesses on this one');
+}
+
+function startFresh(mod, mode) {
+  clearProgress(mod.id, mode, localDateKey());
+  openGame(mod, { fresh: true, mode });
+}
+
+// --- painting the game view -------------------------------------------------
+
+function paintGame() {
+  if (!active) return;
+  const { mod, game, settings } = active;
+
+  mod.paint(game);
+  mod.paintKeys(game, keys);
+
+  dom.gameLabel.textContent = mod.name;
+  const bits = [game.mode === 'daily' ? 'Daily' : 'Free play'];
+  if (mod.difficulties) bits.push(mod.difficulties[settings.difficulty].label);
+  dom.gameSub.textContent = bits.join(' · ');
+  dom.caption.textContent = mod.caption(game);
+  paintTimer();
+
+  const done = game.solved || game.lost;
+  for (const btn of dom.toolbar.querySelectorAll('[data-tool]')) {
+    btn.disabled = done && btn.dataset.tool !== 'new';
   }
 }
 
-/** Start a fresh free-play puzzle, discarding any unfinished free-play board. */
-function startFreePuzzle() {
-  clearProgress('free', localDateKey());
-  loadGame({ fresh: true, mode: 'free' });
+/**
+ * Apply the result of a move: message, repaint, save, then settle the outcome.
+ * @param {{toast?: string, clearAfter?: number}} result
+ */
+function afterMove(result = {}) {
+  if (!active) return;
+  if (result.toast) toast(result.toast);
+
+  paintGame();
+  persist();
+
+  if (result.clearAfter) {
+    clearTimeout(transientTimer);
+    transientTimer = setTimeout(() => {
+      active.mod.clearTransient(active.game);
+      paintGame();
+    }, result.clearAfter);
+  }
+
+  settleOutcome();
 }
 
-/** The in-game "New" button. Daily is one puzzle a day, so it moves to free play. */
-function startNewPuzzle() {
-  startFreePuzzle();
+function settleOutcome() {
+  const { mod, game, settings } = active;
+  if (game.solved || game.lost) return;
+
+  const won = mod.isSolved(game);
+  const lost = !won && mod.isLost(game);
+  if (!won && !lost) return;
+
+  pauseTimer();
+  mod.clearTransient(game);
+  game.selectedIndex = null;
+
+  let global = loadGlobal();
+  if (won) {
+    game.solved = true;
+    ({ global } = recordSolve(mod.id, {
+      mode: game.mode,
+      difficulty: settings.difficulty ?? null,
+      elapsedMs: game.elapsedMs,
+      hintsUsed: game.hintsUsed ?? 0,
+      dateKey: game.dateKey,
+    }));
+  } else {
+    game.lost = true;
+    recordLoss(mod.id);
+  }
+
+  paintGame();
+  persist();
+  showOutcome(won, global);
+}
+
+function showOutcome(won, global) {
+  const { mod, game, settings } = active;
+  const content = mod.outcomeContent(game);
+
+  $('win-title').textContent = content.title;
+  $('win-body').textContent = content.body;
+  $('win-caption').textContent = content.caption ?? '';
+  $('win-time').textContent = formatTime(game.elapsedMs);
+  $('win-hints').textContent = String(game.hintsUsed ?? 0);
+  $('win-streak').textContent = String(effectiveStreak(global));
+
+  const stats = loadStats(mod.id);
+  const band = settings.difficulty ?? 'default';
+  let note = '';
+  if (!won) {
+    note = '';
+  } else if (game.mode === 'free') {
+    // Without this, a run of free-play solves looks like a broken streak counter
+    // rather than a counter measuring something else.
+    note = 'Free play. Solve a Daily to build your streak.';
+  } else if ((game.hintsUsed ?? 0) > 0) {
+    note = 'Best times only count hint-free solves.';
+  } else if (stats.bestTimes[band] === game.elapsedMs) {
+    note = mod.difficulties
+      ? `New best time for ${mod.difficulties[settings.difficulty].label}!`
+      : 'New best time!';
+  }
+  $('win-note').textContent = note;
+
+  dom.dlgWin.classList.toggle('sheet-loss', !won);
+  openDialog(dom.dlgWin);
+  if (won) burstConfetti($('confetti'));
+  else $('confetti').textContent = '';
 }
 
 // --- views ------------------------------------------------------------------
@@ -416,42 +325,73 @@ function showView(next) {
     paintHome();
     window.scrollTo(0, 0);
   }
-  syncTimerToVisibility();
+  syncTimer();
 }
 
 function goHome() {
-  // Unwind the history entry pushed on entering the game so the back gesture
-  // and this button stay in step; popstate performs the actual switch.
+  // Unwind the history entry pushed on entering a game so the back gesture and
+  // this button stay in step; popstate performs the actual switch.
   if (history.state?.view === 'game') {
     history.back();
     return;
   }
-  // Committing progress before leaving means a hard close from the home screen
-  // still comes back to the right board.
   persist();
   showView('home');
 }
 
-/**
- * State of today's daily puzzle, read straight from storage so the home screen
- * never has to build a game (which would inflate the "played" count).
- * @returns {{state: 'new'|'progress'|'solved', filled?: number, total?: number, elapsedMs?: number}}
- */
-function dailyStatus() {
-  const saved = loadProgress('daily', localDateKey());
-  // The daily is seeded per difficulty, so a save from another difficulty is
-  // not today's puzzle as currently configured.
-  if (!saved || saved.difficulty !== settings.difficulty) return { state: 'new' };
-  if (saved.solved) return { state: 'solved', elapsedMs: saved.elapsedMs };
+// --- home screen ------------------------------------------------------------
 
-  const restored = hydrateGame(saved);
-  const filled = restored.letters.filter((code) => restored.guesses[code]).length;
-  if (filled === restored.locked.size) return { state: 'new' };
-  return { state: 'progress', filled, total: restored.letters.length };
+/** Build one card per registered game. Adding a game needs no HTML change. */
+function buildHome() {
+  dom.games.textContent = '';
+
+  for (const mod of GAMES) {
+    const card = document.createElement('li');
+    card.className = 'game-card';
+    card.dataset.game = mod.id;
+
+    const difficultyControl = mod.difficulties
+      ? `<div class="segmented segmented-sm" data-role="difficulty" role="group" aria-label="${mod.name} difficulty">
+           ${Object.entries(mod.difficulties)
+             .map(([key, d]) => `<button class="seg" type="button" data-difficulty="${key}">${d.label}</button>`)
+             .join('')}
+         </div>
+         <p class="hint-text" data-role="note"></p>`
+      : '';
+
+    card.innerHTML = `
+      <div class="game-head">
+        <span class="game-mark" aria-hidden="true">${mod.icon}</span>
+        <div class="game-titles">
+          <h3 class="game-name">${mod.name}</h3>
+          <p class="game-blurb">${mod.blurb}</p>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="card-row-text">
+          <span class="row-label">Daily puzzle</span>
+          <span class="row-status" data-role="status">Not started</span>
+        </div>
+        <button class="btn btn-primary btn-compact" data-role="play-daily" type="button">Play</button>
+      </div>
+
+      <div class="card-row card-row-stack">
+        <div class="card-row-text">
+          <span class="row-label">Free play</span>
+          <span class="row-status">A fresh puzzle any time</span>
+        </div>
+        ${difficultyControl}
+        <button class="btn btn-compact btn-block" data-role="play-free" type="button">New puzzle</button>
+      </div>`;
+
+    dom.games.appendChild(card);
+  }
 }
 
 function paintHome() {
-  const label = DIFFICULTIES[settings.difficulty].label;
+  const today = localDateKey();
+  const global = loadGlobal();
 
   dom.homeDate.textContent = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -459,56 +399,80 @@ function paintHome() {
     day: 'numeric',
   });
 
-  $('home-streak').textContent = String(effectiveStreak(stats));
-  $('home-solved').textContent = String(stats.solved);
-  $('home-best-label').textContent = `Best · ${label}`;
-  const best = stats.bestTimes[settings.difficulty];
-  $('home-best').textContent = best === null ? '—' : formatTime(best);
+  $('home-streak').textContent = String(effectiveStreak(global, today));
+  $('home-solved').textContent = String(global.totalSolved);
+  $('home-today').textContent = `${dailiesSolvedToday(GAME_IDS, today)}/${GAMES.length}`;
 
-  const status = dailyStatus();
-  const statusEl = $('daily-status');
-  statusEl.classList.remove('is-progress', 'is-solved');
+  for (const mod of GAMES) {
+    const card = dom.games.querySelector(`[data-game="${mod.id}"]`);
+    const settings = settingsFor(mod);
+    const label = mod.difficulties ? mod.difficulties[settings.difficulty].label : '';
 
-  if (status.state === 'solved') {
-    statusEl.textContent = `Solved in ${formatTime(status.elapsedMs)}`;
-    statusEl.classList.add('is-solved');
-    $('btn-play-daily').textContent = 'View';
-  } else if (status.state === 'progress') {
-    statusEl.textContent = `In progress · ${status.filled} of ${status.total} letters`;
-    statusEl.classList.add('is-progress');
-    $('btn-play-daily').textContent = 'Continue';
-  } else {
-    statusEl.textContent = `Not started · ${label}`;
-    $('btn-play-daily').textContent = 'Play';
+    const snapshot = loadProgress(mod.id, 'daily', today);
+    // A board saved at another difficulty is not today's puzzle as configured.
+    const usable = snapshot && (snapshot.difficulty ?? null) === (settings.difficulty ?? null);
+    const status = mod.statusFor(usable ? snapshot : null, { difficultyLabel: label });
+
+    const statusEl = card.querySelector('[data-role="status"]');
+    statusEl.textContent = status.text;
+    statusEl.classList.toggle('is-progress', status.state === 'progress');
+    statusEl.classList.toggle('is-solved', status.state === 'solved');
+    statusEl.classList.toggle('is-lost', status.state === 'lost');
+    card.querySelector('[data-role="play-daily"]').textContent = status.action;
+
+    if (mod.difficulties) {
+      for (const btn of card.querySelectorAll('[data-role="difficulty"] .seg')) {
+        btn.setAttribute('aria-pressed', String(btn.dataset.difficulty === settings.difficulty));
+      }
+      card.querySelector('[data-role="note"]').textContent =
+        mod.difficultyNotes?.[settings.difficulty] ?? '';
+    }
   }
 
-  for (const btn of document.querySelectorAll('#home-difficulty .seg')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.difficulty === settings.difficulty));
-  }
   for (const btn of document.querySelectorAll('#seg-theme .seg')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.theme === settings.theme));
+    btn.setAttribute('aria-pressed', String(btn.dataset.theme === appSettings.theme));
   }
-  $('difficulty-note').textContent = DIFFICULTY_NOTES[settings.difficulty] ?? '';
 }
 
-// --- painting ---------------------------------------------------------------
+// --- stats sheet ------------------------------------------------------------
 
-function refresh() {
-  if (!game) return;
+function paintStats() {
+  const global = loadGlobal();
+  $('stat-streak').textContent = String(effectiveStreak(global));
+  $('stat-maxstreak').textContent = String(global.maxStreak);
+  $('stat-total').textContent = String(global.totalSolved);
 
-  updatePuzzle(cells, game, { selectedIndex, wrongLetters });
-  updateKeyboard(keys, game);
+  const host = $('stats-games');
+  host.textContent = '';
 
-  dom.modeLabel.textContent = game.mode === 'daily' ? 'Daily' : 'Free play';
-  dom.difficultyLabel.textContent = DIFFICULTIES[game.difficulty].label;
-  dom.author.textContent = game.solved && game.author ? `— ${game.author}` : '';
-  paintTimer();
+  for (const mod of GAMES) {
+    const stats = loadStats(mod.id);
+    const rate = stats.played === 0 ? 0 : Math.round((stats.solved / stats.played) * 100);
 
-  const done = game.solved;
-  dom.btnHint.disabled = done;
-  dom.btnCheck.disabled = done;
-  dom.btnClear.disabled = done;
+    const bands = mod.difficulties
+      ? Object.entries(mod.difficulties).map(([key, d]) => [d.label, stats.bestTimes[key]])
+      : [['Best', stats.bestTimes.default]];
+
+    const section = document.createElement('section');
+    section.className = 'stats-game';
+    section.innerHTML = `
+      <h3 class="sheet-subtitle">${mod.name}</h3>
+      <dl class="stat-grid">
+        <div><dt>Played</dt><dd>${stats.played}</dd></div>
+        <div><dt>Solved</dt><dd>${stats.solved}</dd></div>
+        <div><dt>Win rate</dt><dd>${rate}%</dd></div>
+      </dl>
+      <dl class="stat-grid stat-grid-sm">
+        <div><dt>Streak</dt><dd>${effectiveStreak(stats)}</dd></div>
+        ${bands
+          .map(([label, ms]) => `<div><dt>${label}</dt><dd>${ms == null ? '—' : formatTime(ms)}</dd></div>`)
+          .join('')}
+      </dl>`;
+    host.appendChild(section);
+  }
 }
+
+// --- misc shell -------------------------------------------------------------
 
 function toast(message) {
   dom.toast.textContent = message;
@@ -519,49 +483,14 @@ function toast(message) {
   }, 1800);
 }
 
-// --- dialogs ----------------------------------------------------------------
-
 function openDialog(dialog) {
   pauseTimer();
   dialog.showModal();
 }
 
-function closeDialog(dialog) {
-  dialog.close();
-}
-
-function wireDialog(dialog) {
-  // Tapping the backdrop closes. The dialog element itself fills the sheet, so
-  // a click landing directly on it means the backdrop was hit.
-  dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) dialog.close();
-  });
-  dialog.addEventListener('close', syncTimerToVisibility);
-}
-
-// --- settings ---------------------------------------------------------------
-
 function applyTheme() {
-  if (settings.theme === 'auto') {
-    document.documentElement.removeAttribute('data-theme');
-  } else {
-    document.documentElement.setAttribute('data-theme', settings.theme);
-  }
-}
-
-function paintStats() {
-  const rate = stats.played === 0 ? 0 : Math.round((stats.solved / stats.played) * 100);
-  $('stat-played').textContent = String(stats.played);
-  $('stat-solved').textContent = String(stats.solved);
-  $('stat-rate').textContent = `${rate}%`;
-  $('stat-streak').textContent = String(effectiveStreak(stats));
-  $('stat-maxstreak').textContent = String(stats.maxStreak);
-  $('stat-hints').textContent = String(stats.totalHints);
-
-  for (const level of ['easy', 'medium', 'hard']) {
-    const best = stats.bestTimes[level];
-    $(`stat-best-${level}`).textContent = best === null ? '—' : formatTime(best);
-  }
+  if (appSettings.theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', appSettings.theme);
 }
 
 // --- events -----------------------------------------------------------------
@@ -569,21 +498,31 @@ function paintStats() {
 function wireEvents() {
   dom.puzzle.addEventListener('click', (event) => {
     const cell = event.target.closest('.cell');
-    if (!cell || !cell.dataset.code || game.solved) return;
-    selectIndex(Number(cell.dataset.index));
+    if (!cell || !active || active.game.solved || active.game.lost) return;
+    active.mod.onSelect(active.game, Number(cell.dataset.index));
+    paintGame();
   });
 
   dom.keyboard.addEventListener('click', (event) => {
     const key = event.target.closest('.key');
-    if (!key) return;
-    if (key.dataset.key === 'DEL') deleteLetter();
-    else assignLetter(key.dataset.key);
+    if (!key || !active) return;
+    afterMove(active.mod.onKey(active.game, key.dataset.key));
   });
 
-  dom.btnHint.addEventListener('click', useHint);
-  dom.btnCheck.addEventListener('click', checkMistakes);
-  dom.btnClear.addEventListener('click', resetBoard);
-  dom.btnNew.addEventListener('click', startNewPuzzle);
+  dom.toolbar.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-tool]');
+    if (!btn || !active) return;
+    const { mod, game } = active;
+
+    if (btn.dataset.tool === 'new') {
+      // Daily is one puzzle a day by definition, so New moves into free play.
+      startFresh(mod, 'free');
+      return;
+    }
+    if (btn.dataset.tool === 'hint') afterMove(mod.hint(game));
+    else if (btn.dataset.tool === 'check') afterMove(mod.check(game));
+    else if (btn.dataset.tool === 'reset') afterMove(mod.reset(game));
+  });
 
   dom.btnHome.addEventListener('click', goHome);
 
@@ -594,72 +533,97 @@ function wireEvents() {
   dom.btnStats.addEventListener('click', openStats);
   $('btn-home-stats').addEventListener('click', openStats);
 
-  $('btn-stats-close').addEventListener('click', () => closeDialog(dom.dlgStats));
+  $('btn-stats-close').addEventListener('click', () => dom.dlgStats.close());
   $('btn-win-home').addEventListener('click', () => {
-    closeDialog(dom.dlgWin);
+    dom.dlgWin.close();
     goHome();
   });
   $('btn-win-next').addEventListener('click', () => {
-    closeDialog(dom.dlgWin);
-    startNewPuzzle();
+    dom.dlgWin.close();
+    startFresh(active.mod, 'free');
   });
 
   $('btn-reset-stats').addEventListener('click', () => {
-    if (!window.confirm('Reset all statistics? This cannot be undone.')) return;
-    stats = resetStats();
+    if (!window.confirm('Reset all statistics for every game? This cannot be undone.')) return;
+    resetAllStats(GAME_IDS);
     paintStats();
-    refresh();
     toast('Statistics reset');
   });
 
-  // --- home controls ---
-  $('btn-play-daily').addEventListener('click', () => loadGame({ mode: 'daily' }));
-  $('btn-play-free').addEventListener('click', startFreePuzzle);
+  // Home cards: play, and per-game difficulty.
+  dom.games.addEventListener('click', (event) => {
+    const card = event.target.closest('.game-card');
+    if (!card) return;
+    const mod = gameById(card.dataset.game);
+    if (!mod) return;
 
-  $('home-difficulty').addEventListener('click', (event) => {
-    const btn = event.target.closest('.seg');
-    if (!btn || btn.dataset.difficulty === settings.difficulty) return;
-    settings.difficulty = btn.dataset.difficulty;
-    saveSettings(settings);
-    // Difficulty reseeds the daily, so the card's status has to be re-read.
-    paintHome();
+    if (event.target.closest('[data-role="play-daily"]')) {
+      openGame(mod, { mode: 'daily' });
+      return;
+    }
+    if (event.target.closest('[data-role="play-free"]')) {
+      startFresh(mod, 'free');
+      return;
+    }
+
+    const seg = event.target.closest('[data-role="difficulty"] .seg');
+    if (seg) {
+      const settings = settingsFor(mod);
+      if (seg.dataset.difficulty === settings.difficulty) return;
+      settings.difficulty = seg.dataset.difficulty;
+      saveGameSettings(mod.id, settings);
+      // Difficulty reseeds that game's daily, so its card has to be re-read.
+      paintHome();
+    }
   });
 
   $('seg-theme').addEventListener('click', (event) => {
     const btn = event.target.closest('.seg');
     if (!btn) return;
-    settings.theme = btn.dataset.theme;
-    saveSettings(settings);
+    appSettings.theme = btn.dataset.theme;
+    saveAppSettings(appSettings);
     applyTheme();
     paintHome();
   });
 
-  [dom.dlgWin, dom.dlgStats].forEach(wireDialog);
+  for (const dialog of [dom.dlgWin, dom.dlgStats]) {
+    // Tapping the backdrop closes. The dialog fills the sheet, so a click landing
+    // directly on it means the backdrop was hit.
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener('close', syncTimer);
+  }
 
   // Physical keyboard, mostly for desktop play and testing.
   document.addEventListener('keydown', (event) => {
-    if (view !== 'game' || anyDialogOpen() || event.metaKey || event.ctrlKey || event.altKey) {
-      return;
-    }
+    if (view !== 'game' || !active || anyDialogOpen()) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const { mod, game } = active;
 
     if (/^[a-zA-Z]$/.test(event.key)) {
       event.preventDefault();
-      assignLetter(event.key.toUpperCase());
+      afterMove(mod.onKey(game, event.key.toUpperCase()));
     } else if (event.key === 'Backspace' || event.key === 'Delete') {
       event.preventDefault();
-      deleteLetter();
+      afterMove(mod.onKey(game, 'DEL'));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      afterMove(mod.onKey(game, 'ENTER'));
     } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
       event.preventDefault();
-      moveSelection(1);
+      mod.move(game, 1);
+      paintGame();
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
       event.preventDefault();
-      moveSelection(-1);
+      mod.move(game, -1);
+      paintGame();
     }
   });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') persist();
-    syncTimerToVisibility();
+    syncTimer();
   });
 
   // pagehide is the reliable "app is going away" signal on iOS, where
@@ -676,26 +640,24 @@ function wireEvents() {
 // --- boot -------------------------------------------------------------------
 
 function boot() {
+  migrateLegacy();
+  appSettings = loadAppSettings();
   applyTheme();
   pruneOldProgress();
 
-  keys = buildKeyboard(dom.keyboard);
+  buildHome();
   wireEvents();
 
   // history.state survives a reload, so refreshing inside a game would leave a
-  // stale {view:'game'} behind and make the back button navigate off the site.
-  // Boot always starts at home, so the entry must say so.
-  if (history.state?.view === 'game') {
-    history.replaceState({ view: 'home' }, '');
-  }
+  // stale {view:'game'} entry behind and make the back button navigate off the
+  // site. Boot always starts at home, so the entry must say so.
+  if (history.state?.view === 'game') history.replaceState({ view: 'home' }, '');
 
-  // Land on home. No game is built until a card is tapped, which also keeps the
-  // "played" count honest -- opening the app is not playing a puzzle.
+  // Land on home. No board is built until a card is tapped, which also keeps the
+  // played count honest -- opening the app is not playing a puzzle.
   showView('home');
 
-  if (!storageAvailable()) {
-    toast('Private mode: progress will not be saved');
-  }
+  if (!storageAvailable()) toast('Private mode: progress will not be saved');
 
   if (['localhost', '127.0.0.1'].includes(location.hostname)) {
     const problems = validateQuotes();
@@ -705,8 +667,8 @@ function boot() {
   // isSecureContext covers https and localhost, which is where service workers
   // are permitted to register at all.
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    // The load that *discovers* a new worker is still served by the old one, so
-    // on an upgrade this page is showing stale assets. Reload once when the new
+    // The load that discovers a new worker is still served by the old one, so on
+    // an upgrade this page is showing stale assets. Reload once when the new
     // worker takes control. Guarded two ways: only when a controller already
     // existed (a first install must not reload), and only once per page.
     const wasControlled = Boolean(navigator.serviceWorker.controller);
