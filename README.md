@@ -25,42 +25,49 @@ because ES modules require HTTP.
 npm test           # node --test, no dependencies
 ```
 
-114 tests over the cipher engine, storage and migration, the shared game
+118 tests over the cipher engine, storage and migration, the shared game
 contract, each game's rules — including the duplicate-letter cases that make
 Fiver's scoring easy to get wrong — and the two lists that have to stay in step
 with the registry (the offline precache and the shell's element ids).
 
 ## Home screen
 
-The home screen is built for a library that keeps growing, so it is a **list of
-compact rows, one per game, sorted into groups by today's state**:
+**The app is two things, so the home screen is two sections.**
 
-- **Pick up where you left off** — dailies in progress
-- **Today's puzzles** — not started yet
-- **Finished today** — solved or out of guesses, dimmed and collapsible
+**Today** is the day's challenges: a dot per game, and a row per daily still to
+play. This section legitimately empties out. When it does it becomes a completion
+panel counting down to the next set, rather than nothing.
 
-Rows move between groups as you play, so the top of the list is always what to do
-next and the list shortens as the day goes on. Tapping a row plays that game's
-daily; the `⋯` button opens its sheet.
+**Games** is every game, always, whatever the dailies have done. Tapping a row
+starts a fresh puzzle. It is never empty, never filtered by progress, and a row
+here never changes meaning under you.
 
-Above the list, a **dot per game** fills in as each daily is finished — a meter
-rather than a tally, because "0 of 14" reads as failure where a row of empty dots
-reads as an invitation. The dots always cover every game, whatever the list is
-filtered to: they report the day, not the current view.
+That split is deliberate, and an earlier version got it wrong: it sorted one list
+by today's state and collapsed the finished games into a `<details>`, so finishing
+every daily left an empty screen. This app generates its puzzles from seeded RNG
+over a quote pack and a word list, so supply is infinite — structurally it is a
+library with a daily attached, not a daily paper. **The daily is an event; the
+library is the app.**
 
-Two things scale the design past a handful of games:
+Details that matter:
 
+- The **dot meter** covers every game whatever the Games list is filtered to: it
+  reports the day, not the current view. A meter rather than a tally, because
+  "0 of 14" reads as failure where a row of empty dots reads as an invitation.
+- A **lost** daily counts as finished. Fiver can run out of guesses, and offering
+  it again under Today would imply a second attempt that does not exist.
+- The completion panel does not claim more than it knows. "All caught up" only
+  when every daily was *solved*; "Done for today" when one was lost; and the
+  streak is only called safe if at least one daily was solved.
 - **Everything about one game lives in its own sheet** — rules, difficulty, free
-  play, its record. A new game costs one row on the home screen, not another
-  card's worth of controls. A game you have never opened shows that sheet before
-  the board, so its rules arrive before its first puzzle.
+  play, its record. A new game costs two rows, not another card's worth of
+  controls. A game you have never opened shows that sheet before the board, from
+  either section, so its rules arrive before its first puzzle.
 - **Category filter chips** appear once the library passes `FILTER_THRESHOLD`
-  games (six). Below that the whole list fits on a screen and a filter is one
-  more thing to read past.
-
-A **New** badge marks a game you have not tried, but only while untried games are
-a minority — on a fresh install everything is new, so the badge would mark
-nothing.
+  games (six), and filter the Games list only.
+- The sheets carry a **sticky close button**. At `92dvh` tall there is almost no
+  backdrop left to tap, so without it the only way out of a long sheet is to
+  scroll to the end of the rules.
 
 No board is built until you tap one, which keeps the played count honest: opening
 the app is not playing. The phone's back gesture returns here rather than leaving.

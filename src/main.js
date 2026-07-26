@@ -16,7 +16,9 @@ import { buildKeyboard, burstConfetti } from './render.js';
 import {
   clearProgress,
   effectiveStreak,
+  formatCountdown,
   formatTime,
+  msUntilLocalMidnight,
   loadAppSettings,
   loadGameSettings,
   loadGlobal,
@@ -40,12 +42,12 @@ const dom = {
   viewHome: $('view-home'),
   viewGame: $('view-game'),
   homeDate: $('home-date'),
-  games: $('games'),
   chips: $('chips'),
 
-  // The three groups a game row can sit in, keyed by bucket name.
-  lists: { resume: $('list-resume'), open: $('list-open'), done: $('list-done') },
-  sections: { resume: $('sec-resume'), open: $('sec-open'), done: $('sec-done') },
+  // Today holds a row per daily still to play; Games holds every game, always.
+  listToday: $('list-today'),
+  listGames: $('list-games'),
+  todayDone: $('today-done'),
 
   puzzle: $('puzzle'),
   caption: $('caption'),
@@ -74,8 +76,15 @@ let active = null;
 let keys = null;
 let keyboardOwner = null; // which game's layout is currently built
 
-/** Home rows, built once and moved between groups as their state changes. */
-const rowEls = new Map();
+/**
+ * Home rows, built once and moved in and out of the DOM as state changes.
+ *
+ * Two pools, because the same game says different things in the two sections: in
+ * Today a row is that game's daily (Play / Continue), in Games it is a fresh
+ * puzzle (New puzzle).
+ */
+const todayRowEls = new Map();
+const gameRowEls = new Map();
 
 /** Which category the home list is filtered to, or 'all'. Not persisted: this is
     a browsing state, not a preference. */
@@ -88,6 +97,12 @@ let runningSince = null;
 let tickHandle = null;
 let toastTimer = null;
 let transientTimer = null;
+
+/** Ticks the "new dailies in ..." countdown while home is on screen. */
+let countdownHandle = null;
+
+/** The date the home screen was last painted for, so midnight can roll it over. */
+let homeDateKey = null;
 
 // --- timer ------------------------------------------------------------------
 
@@ -348,6 +363,7 @@ function showView(next) {
     window.scrollTo(0, 0);
   }
   syncTimer();
+  syncCountdown();
 }
 
 function goHome() {
@@ -363,10 +379,20 @@ function goHome() {
 
 // --- home screen ------------------------------------------------------------
 //
-// The home screen is a list of compact rows, one per game, sorted into three
-// groups by today's state: in progress, not started, finished. The groups
-// reorder themselves as you play, so the top of the list is always what to do
-// next and the list shortens as the day goes on.
+// Two sections, because the app is two things.
+//
+//   Today   the day's challenges: a dot per game, and a row per daily still to
+//           play. This section legitimately empties out, and when it does it
+//           becomes a completion panel counting down to the next set.
+//
+//   Games   every game, always, whatever the dailies have done. Tapping a row
+//           starts a fresh puzzle.
+//
+// The earlier build sorted one list by today's state and collapsed the finished
+// games into a <details>, so finishing every daily left an empty screen. The
+// daily is an event; the library is the app. Keeping them in separate sections is
+// what library-first puzzle apps do, and it means a game entry never changes
+// meaning under you.
 //
 // Everything else about a game -- its rules, its difficulty, free play, its
 // record -- lives in a per-game sheet. That is what lets the library grow: N
@@ -387,53 +413,63 @@ function todayStatus(mod, today = localDateKey()) {
  * board -- worth a tap for something you have never seen, and skipped entirely
  * for a game you already know.
  */
-function isUntried(mod, status) {
-  return loadStats(mod.id).played === 0 && status.state === 'new';
+function isUntried(mod) {
+  return loadStats(mod.id).played === 0;
+}
+
+/** One row of markup, used for both sections. */
+function buildRow(mod) {
+  const row = document.createElement('li');
+  row.className = 'game-row';
+  row.dataset.game = mod.id;
+  row.innerHTML = `
+    <button class="row-main" data-role="open" type="button">
+      <span class="row-mark" aria-hidden="true">${mod.icon}</span>
+      <span class="row-text">
+        <span class="row-name">${mod.name}</span>
+        <span class="row-status" data-role="status"></span>
+      </span>
+      <span class="row-action" data-role="action"></span>
+    </button>
+    <button class="row-more" data-role="more" type="button" aria-label="${mod.name} details">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="5" cy="12" r="1.9" />
+        <circle cx="12" cy="12" r="1.9" />
+        <circle cx="19" cy="12" r="1.9" />
+      </svg>
+    </button>`;
+  return row;
+}
+
+/** Build both row pools. Adding a game needs no HTML change. */
+function buildHome() {
+  buildChips();
+  todayRowEls.clear();
+  gameRowEls.clear();
+
+  for (const mod of GAMES) {
+    todayRowEls.set(mod.id, buildRow(mod));
+
+    // The Games row never changes its label: in this section a tap always means
+    // "start a fresh puzzle", whatever today's daily has done.
+    const gameRow = buildRow(mod);
+    gameRow.querySelector('[data-role="action"]').textContent = 'New puzzle';
+    gameRowEls.set(mod.id, gameRow);
+  }
 }
 
 /**
- * Whether New badges would mean anything.
- *
- * A badge marks an exception, so it only earns its place when untried games are
- * a minority: on a fresh install everything is new, and a batch of nine added at
- * once is a wall of blue that says nothing about any one of them.
- *
- * @param {number} untried
- * @param {number} total
+ * A Games row's status line: what you have done with this game overall, not
+ * today. Best time is read from the difficulty band currently selected, since
+ * that is the puzzle the row would start.
  */
-function badgesAreMeaningful(untried, total) {
-  return untried > 0 && untried < total && untried <= Math.max(1, Math.floor(total / 3));
-}
+function recordLine(mod) {
+  const stats = loadStats(mod.id);
+  if (stats.played === 0) return 'Not played yet';
 
-/** Build one row per registered game. Adding a game needs no HTML change. */
-function buildHome() {
-  buildChips();
-  rowEls.clear();
-
-  for (const mod of GAMES) {
-    const row = document.createElement('li');
-    row.className = 'game-row';
-    row.dataset.game = mod.id;
-    row.innerHTML = `
-      <button class="row-main" data-role="open" type="button">
-        <span class="row-mark" aria-hidden="true">${mod.icon}</span>
-        <span class="row-text">
-          <span class="row-name">
-            ${mod.name}<span class="pill-new" data-role="new" hidden>New</span>
-          </span>
-          <span class="row-status" data-role="status"></span>
-        </span>
-        <span class="row-action" data-role="action"></span>
-      </button>
-      <button class="row-more" data-role="more" type="button" aria-label="${mod.name} details">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="5" cy="12" r="1.9" />
-          <circle cx="12" cy="12" r="1.9" />
-          <circle cx="19" cy="12" r="1.9" />
-        </svg>
-      </button>`;
-    rowEls.set(mod.id, row);
-  }
+  const best = stats.bestTimes[settingsFor(mod).difficulty ?? 'default'];
+  const solved = `${stats.solved} solved`;
+  return best == null ? solved : `Best ${formatTime(best)} · ${solved}`;
 }
 
 /**
@@ -456,6 +492,8 @@ function buildChips() {
 
 function paintHome() {
   const today = localDateKey();
+  homeDateKey = today;
+
   const global = loadGlobal();
   const streak = effectiveStreak(global, today);
 
@@ -473,41 +511,35 @@ function paintHome() {
     streak === 0 ? 'Statistics. No current streak' : `Statistics. ${streak} day streak`
   );
 
-  // Read every game's state first: whether a New badge means anything depends on
-  // how many of them are untried.
   const entries = GAMES.map((mod) => ({ mod, status: todayStatus(mod, today) }));
-  const untried = entries.filter(({ mod, status }) => isUntried(mod, status)).length;
-  const badges = badgesAreMeaningful(untried, entries.length);
 
-  const buckets = { resume: [], open: [], done: [] };
-  const states = [];
-  let solvedToday = 0;
+  // --- Today: a row per daily still to play -------------------------------
+  // 'lost' counts as finished. Fiver can run out of guesses, and offering it
+  // again under "Today" would imply a second attempt that does not exist.
+  const pending = entries.filter(({ status }) => status.state === 'new' || status.state === 'progress');
+  const solvedToday = entries.filter(({ status }) => status.state === 'solved').length;
 
-  for (const { mod, status } of entries) {
-    paintRow(mod, status, badges);
-
-    states.push(status.state);
-    if (status.state === 'solved') solvedToday += 1;
-
-    const bucket =
-      status.state === 'progress' ? 'resume' : status.state === 'new' ? 'open' : 'done';
-    if (filter === 'all' || mod.category === filter) buckets[bucket].push(mod.id);
+  dom.listToday.textContent = '';
+  for (const { mod, status } of pending) {
+    const row = todayRowEls.get(mod.id);
+    paintRowStatus(row, status.text, status.state);
+    row.querySelector('[data-role="action"]').textContent = status.action;
+    dom.listToday.appendChild(row);
   }
 
-  // Rows are moved rather than rebuilt, so nothing is thrown away on a repaint.
-  for (const [name, ids] of Object.entries(buckets)) {
-    const list = dom.lists[name];
-    list.textContent = '';
-    for (const id of ids) list.appendChild(rowEls.get(id));
-    dom.sections[name].hidden = ids.length === 0;
+  paintDots(entries.map(({ status }) => status.state));
+  $('today-count').textContent = `${solvedToday} of ${GAMES.length} done`;
+  paintTodayDone(pending.length, solvedToday, streak);
+
+  // --- Games: every game, every time --------------------------------------
+  dom.listGames.textContent = '';
+  for (const { mod } of entries) {
+    if (filter !== 'all' && mod.category !== filter) continue;
+    const row = gameRowEls.get(mod.id);
+    paintRowStatus(row, recordLine(mod), 'record');
+    dom.listGames.appendChild(row);
   }
 
-  // With nothing in progress, "Today's puzzles" is the only heading that makes
-  // sense; with something in progress, the two headings divide the list.
-  $('open-head').textContent = buckets.resume.length ? 'Also today' : "Today's puzzles";
-  $('done-head').textContent = `Finished today · ${buckets.done.length}`;
-
-  paintTodayMeter(states, solvedToday, streak);
   paintChips();
 
   $('home-foot').textContent =
@@ -516,24 +548,19 @@ function paintHome() {
       : `${global.totalSolved} solved all time · best streak ${global.maxStreak}`;
 }
 
-function paintRow(mod, status, badges) {
-  const row = rowEls.get(mod.id);
-
-  const statusEl = row.querySelector('[data-role="status"]');
-  statusEl.textContent = status.text;
-  statusEl.classList.toggle('is-progress', status.state === 'progress');
-  statusEl.classList.toggle('is-solved', status.state === 'solved');
-  statusEl.classList.toggle('is-lost', status.state === 'lost');
-
-  row.querySelector('[data-role="action"]').textContent = status.action;
-  row.querySelector('[data-role="new"]').hidden = !badges || !isUntried(mod, status);
+function paintRowStatus(row, text, state) {
+  const el = row.querySelector('[data-role="status"]');
+  el.textContent = text;
+  el.classList.toggle('is-progress', state === 'progress');
+  el.classList.toggle('is-solved', state === 'solved');
+  el.classList.toggle('is-lost', state === 'lost');
 }
 
 /**
- * The dot meter always covers every game, whatever the list is filtered to:
- * it reports the day, not the current view.
+ * One dot per game, whatever the Games list is filtered to: the meter reports
+ * the day, not the current view.
  */
-function paintTodayMeter(states, solvedToday, streak) {
+function paintDots(states) {
   const dots = $('today-dots');
   dots.textContent = '';
   for (const state of states) {
@@ -541,19 +568,60 @@ function paintTodayMeter(states, solvedToday, streak) {
     if (state !== 'new') dot.className = `is-${state}`;
     dots.appendChild(dot);
   }
+}
 
-  $('today-count').textContent = `${solvedToday} of ${GAMES.length} done`;
+/**
+ * Swap between the nudge shown while dailies are outstanding and the completion
+ * panel shown once none are left.
+ */
+function paintTodayDone(pending, solvedToday, streak) {
+  const done = pending === 0;
+  dom.todayDone.hidden = !done;
 
-  let note = '';
-  if (solvedToday === 0) {
-    note =
-      streak > 0
-        ? `Solve any daily to keep your ${streak}-day streak going.`
-        : 'Solve any daily to start a streak.';
-  } else if (solvedToday === GAMES.length) {
-    note = 'Every daily done. Free play is still open.';
+  // The nudge only earns its place when there is a streak to lose today.
+  $('today-note').textContent =
+    !done && solvedToday === 0 && streak > 0
+      ? `Solve any daily to keep your ${streak}-day streak going.`
+      : '';
+
+  if (!done) return;
+
+  // "All caught up" would be a lie on a day something was lost rather than
+  // solved, and the streak claim only holds if at least one daily was solved.
+  $('today-done-line').textContent =
+    solvedToday === GAMES.length
+      ? 'All caught up. Streak is safe.'
+      : solvedToday > 0
+        ? 'Done for today. Streak is safe.'
+        : 'Nothing more today.';
+
+  paintCountdown();
+}
+
+function paintCountdown() {
+  $('today-countdown').textContent = `New dailies in ${formatCountdown(msUntilLocalMidnight())}`;
+}
+
+/** Keep the countdown live, and roll the whole screen over at midnight. */
+function tickCountdown() {
+  if (localDateKey() !== homeDateKey) {
+    paintHome();
+    return;
   }
-  $('today-note').textContent = note;
+  paintCountdown();
+}
+
+function syncCountdown() {
+  const wanted =
+    view === 'home' && document.visibilityState === 'visible' && !dom.todayDone.hidden;
+
+  if (wanted && countdownHandle === null) {
+    // Twice a minute, so the displayed minute is never more than 30s stale.
+    countdownHandle = setInterval(tickCountdown, 30_000);
+  } else if (!wanted && countdownHandle !== null) {
+    clearInterval(countdownHandle);
+    countdownHandle = null;
+  }
 }
 
 function paintChips() {
@@ -759,8 +827,9 @@ function wireEvents() {
     startFresh(active.mod, 'free');
   });
 
-  // Home rows: the row plays, the dots button opens the game's sheet.
-  dom.games.addEventListener('click', (event) => {
+  // Home rows: the row plays, the dots button opens the game's sheet. Which
+  // section the row sits in decides what "plays" means.
+  dom.viewHome.addEventListener('click', (event) => {
     const row = event.target.closest('.game-row');
     if (!row) return;
     const mod = gameById(row.dataset.game);
@@ -770,10 +839,17 @@ function wireEvents() {
       openGameSheet(mod);
       return;
     }
-    if (event.target.closest('[data-role="open"]')) {
-      if (isUntried(mod, todayStatus(mod))) openGameSheet(mod);
-      else openGame(mod, { mode: 'daily' });
+    if (!event.target.closest('[data-role="open"]')) return;
+
+    // A game you have never opened shows its rules first, from either section.
+    if (isUntried(mod)) {
+      openGameSheet(mod);
+      return;
     }
+
+    const list = row.closest('[data-list]')?.dataset.list;
+    if (list === 'today') openGame(mod, { mode: 'daily' });
+    else startFresh(mod, 'free');
   });
 
   dom.chips.addEventListener('click', (event) => {
@@ -841,8 +917,12 @@ function wireEvents() {
     // directly on it means the backdrop was hit.
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) dialog.close();
+      else if (event.target.closest('[data-close]')) dialog.close();
     });
-    dialog.addEventListener('close', syncTimer);
+    dialog.addEventListener('close', () => {
+      syncTimer();
+      syncCountdown();
+    });
   }
 
   // Physical keyboard, mostly for desktop play and testing.
@@ -873,7 +953,9 @@ function wireEvents() {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') persist();
+    else if (view === 'home') paintHome(); // may have been backgrounded past midnight
     syncTimer();
+    syncCountdown();
   });
 
   // pagehide is the reliable "app is going away" signal on iOS, where

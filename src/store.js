@@ -82,6 +82,38 @@ export function previousDateKey(dateKey) {
 }
 
 /**
+ * Milliseconds until the next local midnight, when every daily rolls over.
+ *
+ * Built from the local calendar date rather than by adding 24 hours, so the
+ * answer stays correct across a daylight-saving change, where a local day is 23
+ * or 25 hours long.
+ *
+ * @param {Date} [now]
+ * @returns {number}
+ */
+export function msUntilLocalMidnight(now = new Date()) {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+/**
+ * A coarse time-remaining string for the countdown to tomorrow's puzzles.
+ *
+ * Deliberately not M:SS like formatTime: a bare "6:12" reads as six minutes
+ * twelve seconds just as easily as six hours twelve minutes, and this number is
+ * only ever glanced at.
+ *
+ * @param {number} ms
+ * @returns {string}
+ */
+export function formatCountdown(ms) {
+  if (ms <= 60_000) return 'under a minute';
+  const minutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+/**
  * Format milliseconds as M:SS, or H:MM:SS past an hour.
  * @param {number} ms
  * @returns {string}

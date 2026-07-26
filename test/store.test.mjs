@@ -314,6 +314,49 @@ test('pruneOldProgress drops previous days across every game but keeps today and
   }
 });
 
+// --- countdown to the next dailies -----------------------------------------
+
+test('msUntilLocalMidnight measures to the next local midnight', () => {
+  const at = (y, m, d, h, min, s = 0) => store.msUntilLocalMidnight(new Date(y, m - 1, d, h, min, s));
+
+  assert.equal(at(2026, 8, 1, 23, 30), 30 * 60 * 1000);
+  assert.equal(at(2026, 8, 1, 0, 0), 24 * 60 * 60 * 1000, 'midnight itself is a full day out');
+  assert.equal(at(2026, 8, 1, 12, 0), 12 * 60 * 60 * 1000);
+
+  // Rolls over month and year boundaries, since it is built from the calendar
+  // date rather than by adding a fixed 24 hours.
+  assert.equal(at(2026, 8, 31, 23, 59), 60 * 1000);
+  assert.equal(at(2026, 12, 31, 23, 0), 60 * 60 * 1000);
+});
+
+test('msUntilLocalMidnight is always positive and at most a long day', () => {
+  for (const hour of [0, 1, 5, 12, 18, 23]) {
+    const ms = store.msUntilLocalMidnight(new Date(2026, 7, 15, hour, 17, 42));
+    assert.ok(ms > 0, `hour ${hour} produced ${ms}`);
+    // 25 hours, so a day that gains an hour to daylight saving still passes.
+    assert.ok(ms <= 25 * 60 * 60 * 1000, `hour ${hour} produced ${ms}`);
+  }
+});
+
+test('formatCountdown reads as a duration, not as a clock time', () => {
+  assert.equal(store.formatCountdown(6 * 3600e3 + 12 * 60e3), '6h 12m');
+  assert.equal(store.formatCountdown(3600e3), '1h 0m');
+  assert.equal(store.formatCountdown(43 * 60e3), '43m');
+  assert.equal(store.formatCountdown(61e3), '1m');
+
+  // A bare "6:12" would be unreadable here -- six hours twelve, or six minutes
+  // twelve? Every result carries its units.
+  assert.match(store.formatCountdown(2 * 3600e3), /h /);
+  assert.match(store.formatCountdown(5 * 60e3), /m$/);
+});
+
+test('formatCountdown does not count down to zero', () => {
+  // Reaching "0m" would sit there looking broken for a whole minute.
+  assert.equal(store.formatCountdown(60e3), 'under a minute');
+  assert.equal(store.formatCountdown(1), 'under a minute');
+  assert.equal(store.formatCountdown(0), 'under a minute');
+});
+
 test('resetAllStats clears every game and the site-wide record', () => {
   reset();
   store.recordSolve('cryptogram', RESULT());

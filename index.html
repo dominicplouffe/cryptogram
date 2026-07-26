@@ -56,38 +56,46 @@
         </button>
       </header>
 
-      <!-- Today: one dot per game, filled as its daily is finished. A meter
-           rather than a tally, so a growing library never reads as "0 of 14". -->
-      <section class="today" aria-labelledby="today-head">
+      <!-- Today: the day's challenges. One dot per game, filled as its daily is
+           finished -- a meter rather than a tally, so a growing library never
+           reads as "0 of 14". A row per daily still to play; once none are left
+           the whole section becomes a completion panel with a countdown.
+
+           This section can empty out. The Games list below never does, which is
+           the point: the daily is an event, the library is the app. -->
+      <section class="group" aria-labelledby="today-head">
         <div class="today-top">
           <h2 class="home-section" id="today-head">Today</h2>
           <span class="today-count" id="today-count"></span>
         </div>
         <ol class="dots" id="today-dots" aria-hidden="true"></ol>
         <p class="today-note" id="today-note"></p>
+
+        <ul class="rows" id="list-today" data-list="today"></ul>
+
+        <div class="today-done" id="today-done" hidden>
+          <span class="today-check" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>
+          </span>
+          <div class="today-done-text">
+            <span class="today-done-line" id="today-done-line"></span>
+            <span class="countdown" id="today-countdown"></span>
+          </div>
+        </div>
       </section>
 
       <!-- Appears once there are enough games to be worth filtering. -->
       <div class="chips" id="chips" role="group" aria-label="Filter by kind" hidden></div>
 
-      <!-- Rows are generated from src/games/registry.js and sorted into these
-           three groups by today's state, so adding a game needs no change here. -->
-      <div id="games">
-        <section class="group" id="sec-resume" hidden>
-          <h2 class="home-section">Pick up where you left off</h2>
-          <ul class="rows" id="list-resume"></ul>
-        </section>
-
-        <section class="group" id="sec-open" hidden>
-          <h2 class="home-section" id="open-head">Today's puzzles</h2>
-          <ul class="rows" id="list-open"></ul>
-        </section>
-
-        <details class="group group-done" id="sec-done" hidden>
-          <summary id="done-head">Finished today</summary>
-          <ul class="rows" id="list-done"></ul>
-        </details>
-      </div>
+      <!-- Every game, always, whatever today's dailies have done. Rows are
+           generated from src/games/registry.js, so adding a game needs no change
+           here. Tapping one starts a fresh puzzle. -->
+      <section class="group" aria-labelledby="games-head">
+        <h2 class="home-section" id="games-head">
+          Games <span class="section-note">&middot; free play, any time</span>
+        </h2>
+        <ul class="rows" id="list-games" data-list="games"></ul>
+      </section>
 
       <button class="home-foot" id="home-foot" type="button"></button>
     </div>
@@ -171,6 +179,14 @@
          without the home screen growing with it.
          ================================================================ -->
     <dialog class="sheet" id="dlg-game" aria-labelledby="gs-name">
+      <div class="sheet-head">
+        <button class="sheet-close" data-close type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+
       <div class="gs-head">
         <span class="game-mark" id="gs-mark" aria-hidden="true"></span>
         <div class="gs-head-text">
@@ -217,6 +233,14 @@
 
     <!-- Stats -->
     <dialog class="sheet" id="dlg-stats" aria-labelledby="stats-title">
+      <div class="sheet-head">
+        <button class="sheet-close" data-close type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+
       <h2 class="sheet-title" id="stats-title">Statistics</h2>
       <dl class="stat-grid">
         <div><dt>Daily streak</dt><dd id="stat-streak">0</dd></div>
@@ -236,6 +260,14 @@
 
     <!-- Settings -->
     <dialog class="sheet" id="dlg-settings" aria-labelledby="settings-title">
+      <div class="sheet-head">
+        <button class="sheet-close" data-close type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+
       <h2 class="sheet-title" id="settings-title">Settings</h2>
 
       <h3 class="sheet-subtitle">Appearance</h3>

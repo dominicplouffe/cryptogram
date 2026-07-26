@@ -249,11 +249,7 @@ svg {
   fill: var(--text-faint);
 }
 
-/* --- today meter ---------------------------------------------------------- */
-
-.today {
-  margin-bottom: 22px;
-}
+/* --- today ---------------------------------------------------------------- */
 
 .today-top {
   display: flex;
@@ -319,6 +315,62 @@ svg {
 
 .today-note:empty {
   display: none;
+}
+
+/* Every daily finished. Replaces the row list rather than leaving a gap, and
+   carries the countdown to the next set. */
+.today-done {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.today-check {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--locked);
+  display: grid;
+  place-items: center;
+}
+
+.today-check svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--bg);
+  stroke-width: 3;
+}
+
+.today-done-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.today-done-line {
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.countdown {
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A qualifier inside an uppercase section heading. */
+.section-note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: var(--text-faint);
 }
 
 /* --- category chips ------------------------------------------------------- */
@@ -439,20 +491,6 @@ svg {
   text-overflow: ellipsis;
 }
 
-/* Marks a game you have never opened. Derived from the play count, so it clears
-   itself the first time you play. */
-.pill-new {
-  flex: 0 0 auto;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
 .row-action {
   flex: 0 0 auto;
   font-size: 13px;
@@ -480,49 +518,6 @@ svg {
   height: 18px;
   fill: currentColor;
   stroke: none;
-}
-
-/* Finished games stay reachable but stop competing for attention. */
-.group-done {
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-.group-done > summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 4px 0 9px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-faint);
-}
-
-.group-done > summary::-webkit-details-marker {
-  display: none;
-}
-
-.group-done > summary::after {
-  content: ' \25BE';
-}
-
-.group-done[open] > summary::after {
-  content: ' \25B4';
-}
-
-.group-done .game-row {
-  background: none;
-}
-
-.group-done .row-name,
-.group-done .row-action {
-  color: var(--text-dim);
-}
-
-.group-done .row-mark svg {
-  fill: var(--text-faint);
 }
 
 .home-foot {
@@ -1084,6 +1079,49 @@ svg {
   padding: 20px 20px calc(var(--safe-b) + 20px);
   max-height: 92dvh;
   overflow-y: auto;
+}
+
+/* A sheet with a sticky bar gets its top padding from the bar instead. Giving
+   the bar a negative top margin would shift it up AND shrink the space it
+   occupies, letting the content scroll underneath it. */
+.sheet[open]:has(.sheet-head) {
+  padding-top: 0;
+}
+
+/* Keeps the close button reachable however far you have scrolled. At 92dvh tall
+   there is almost no backdrop left to tap, so without this the only way out of a
+   long sheet is to scroll to the end. */
+.sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 -20px 6px;
+  padding: 9px 11px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-close {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+}
+
+.sheet-close:active {
+  background: var(--key-active);
+  color: var(--text);
+}
+
+.sheet-close svg {
+  width: 17px;
+  height: 17px;
 }
 
 @media (min-width: 560px) {
