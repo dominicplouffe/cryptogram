@@ -273,12 +273,16 @@ svg {
 /* One dot per game, filled as its daily is finished. A meter rather than a
    tally: "0 of 14" reads as failure, a row of empty dots reads as an invitation.
    Wrapping means it survives a library of any size. */
+/* The bottom margin belongs here, not on whatever follows. The note below is
+   hidden on any day there is no streak to lose, and when the spacing lived on it
+   the dots ended up flush against the first card. Nothing in this section may
+   depend on a conditionally hidden sibling for its spacing. */
 .dots {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0;
+  margin: 0 0 12px;
   padding: 0;
 }
 
@@ -307,8 +311,9 @@ svg {
   border-color: var(--error);
 }
 
+/* Carries its own bottom spacing for the same reason. */
 .today-note {
-  margin: 10px 0 0;
+  margin: 0 0 12px;
   font-size: 13px;
   color: var(--text-dim);
 }
@@ -323,7 +328,6 @@ svg {
   display: flex;
   align-items: center;
   gap: 11px;
-  margin-top: 12px;
   padding: 12px 14px;
   background: var(--bg-raised);
   border: 1px solid var(--line);
