@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cryptogram">
+  <!-- Three cryptogram cells: two solved, one still blank.
+       Kept in sync with tools/make-icons.mjs, which draws the same geometry. -->
+  <rect width="512" height="512" rx="102" fill="#12141c" />
+
+  <g fill="#7aa2f7">
+    <rect x="61" y="159" width="102" height="128" rx="18" />
+    <rect x="61" y="317" width="102" height="28" rx="14" />
+  </g>
+
+  <rect x="205" y="317" width="102" height="28" rx="14" fill="#5a6482" />
+
+  <g fill="#7aa2f7">
+    <rect x="349" y="159" width="102" height="128" rx="18" />
+    <rect x="349" y="317" width="102" height="28" rx="14" />
+  </g>
+</svg>

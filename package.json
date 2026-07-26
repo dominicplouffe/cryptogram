@@ -1,0 +1,11 @@
+{
+  "name": "cryptogram",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A mobile-first cryptogram puzzle game. Static site, no dependencies, no build step.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "python3 -m http.server 8000"
+  }
+}

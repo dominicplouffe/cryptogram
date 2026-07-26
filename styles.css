@@ -1,0 +1,771 @@
+/* ==========================================================================
+   Cryptogram
+   Mobile-first. Dark by default, light via prefers-color-scheme or an
+   explicit data-theme on <html>.
+   ========================================================================== */
+
+:root {
+  --bg: #12141c;
+  --bg-raised: #1a1d28;
+  --bg-sunken: #0d0f16;
+  --line: #2a2f3f;
+  --text: #eceef5;
+  --text-dim: #9aa1b8;
+  --text-faint: #656c85;
+
+  --accent: #7aa2f7;
+  --accent-ink: #0d0f16;
+  --locked: #7dcfa0;
+  --warn: #e0af68;
+  --error: #f7768e;
+
+  --key-bg: #262b3a;
+  --key-active: #333a4e;
+
+  --radius: 12px;
+  --radius-lg: 18px;
+
+  /* Overwritten per puzzle by render.js to fit the quote on screen. */
+  --cell-w: 24px;
+  --cell-font: 19px;
+  --code-font: 10px;
+
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --bg: #f5f3ee;
+    --bg-raised: #fffefb;
+    --bg-sunken: #e9e6de;
+    --line: #d8d3c7;
+    --text: #23262e;
+    --text-dim: #5f6472;
+    --text-faint: #8b90a0;
+
+    --accent: #3b6ea5;
+    --accent-ink: #ffffff;
+    --locked: #2f855a;
+    --warn: #a86a12;
+    --error: #c0392b;
+
+    --key-bg: #ffffff;
+    --key-active: #e4e0d6;
+
+    color-scheme: light;
+  }
+}
+
+:root[data-theme='light'] {
+  --bg: #f5f3ee;
+  --bg-raised: #fffefb;
+  --bg-sunken: #e9e6de;
+  --line: #d8d3c7;
+  --text: #23262e;
+  --text-dim: #5f6472;
+  --text-faint: #8b90a0;
+
+  --accent: #3b6ea5;
+  --accent-ink: #ffffff;
+  --locked: #2f855a;
+  --warn: #a86a12;
+  --error: #c0392b;
+
+  --key-bg: #ffffff;
+  --key-active: #e4e0d6;
+
+  color-scheme: light;
+}
+
+/* --- reset ---------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+
+  /* Stop pull-to-refresh from wiping out a puzzle mid-solve. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+
+  /* Kill the 300ms tap delay and the grey iOS flash. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- app frame ------------------------------------------------------------ */
+
+.app {
+  display: flex;
+  flex-direction: column;
+
+  /* dvh, not vh: iOS Safari's collapsing URL bar would otherwise push the
+     keyboard off the bottom of the screen. */
+  height: 100dvh;
+  max-width: 640px;
+  margin: 0 auto;
+
+  padding-left: var(--safe-l);
+  padding-right: var(--safe-r);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-t) + 8px) 10px 8px;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.topbar-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.mode-label {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.topbar-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-sub .dot {
+  margin: 0 3px;
+  color: var(--text-faint);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+
+.icon-btn:active {
+  background: var(--key-active);
+  color: var(--text);
+}
+
+/* --- puzzle --------------------------------------------------------------- */
+
+.stage {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 8px;
+  min-height: 0;
+
+  /* `safe` matters: with plain `center`, content taller than the container
+     overflows past the *top* scroll boundary and becomes unreachable. The
+     safe keyword falls back to flex-start once it would overflow. The first
+     declaration is the fallback for browsers without `safe`. */
+  justify-content: center;
+  justify-content: safe center;
+}
+
+.puzzle {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 16px 9px;
+
+  /* Long-press on a cell should never pop the text-selection menu. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* A word is one flex item, so a line break can never fall inside it. */
+.word {
+  display: flex;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: var(--cell-w);
+  flex: 0 0 auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cell-guess {
+  display: grid;
+  place-items: center;
+
+  /* Inset from the cell so each letter gets its own underline instead of the
+     whole word running together as one bar. Insetting rather than adding a gap
+     keeps the cell grid metrics unchanged. */
+  width: calc(100% - 4px);
+  height: calc(var(--cell-font) * 1.5);
+  font-size: var(--cell-font);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 2px solid var(--line);
+  border-radius: 3px 3px 0 0;
+  color: var(--text);
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.cell-code {
+  font-size: var(--code-font);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-top: 3px;
+  transition: color 0.12s ease;
+}
+
+/* Punctuation and spaces: shown, but not playable. */
+.cell.static .cell-guess {
+  border-bottom-color: transparent;
+  color: var(--text-dim);
+}
+
+/* Every cell sharing the selected coded letter lights up together. This is the
+   core affordance: you see your guess ripple across the whole quote. */
+.cell.peer .cell-guess {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-bottom-color: var(--accent);
+}
+
+.cell.selected .cell-guess {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-bottom-color: var(--accent);
+}
+
+.cell.peer .cell-code,
+.cell.selected .cell-code {
+  color: var(--accent);
+}
+
+.cell.locked .cell-guess {
+  color: var(--locked);
+}
+
+.cell.locked .cell-code {
+  color: color-mix(in srgb, var(--locked) 70%, var(--text-faint));
+}
+
+/* Same letter used for two different codes: one of them must be wrong. */
+.cell.dup .cell-guess {
+  color: var(--warn);
+  border-bottom-color: var(--warn);
+}
+
+.cell.wrong .cell-guess {
+  color: var(--error);
+  border-bottom-color: var(--error);
+  animation: shake 0.3s ease;
+}
+
+.cell.selected.dup .cell-guess,
+.cell.selected.wrong .cell-guess {
+  color: var(--accent-ink);
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+.author {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  font-style: italic;
+  margin: 18px 0 0;
+  min-height: 1.2em;
+}
+
+/* --- toolbar -------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.tool-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  min-height: 44px;
+  justify-content: center;
+}
+
+.tool-btn:active {
+  background: var(--key-active);
+  color: var(--text);
+}
+
+.tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tool-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tool-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* --- keyboard ------------------------------------------------------------- */
+
+.keyboard {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 5px calc(var(--safe-b) + 8px);
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--line);
+}
+
+.krow {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 46px;
+  border-radius: 7px;
+  background: var(--key-bg);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+  transition: background-color 0.08s ease, transform 0.08s ease, opacity 0.12s ease;
+}
+
+.key:active {
+  background: var(--key-active);
+  transform: translateY(1px);
+}
+
+/* Letters already assigned somewhere: dimmed so the remaining alphabet is
+   readable at a glance. Still tappable, because reassigning is normal play. */
+.key.used {
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--key-bg) 55%, var(--bg-sunken));
+  box-shadow: none;
+}
+
+.key.wide {
+  flex: 1.6 1 0;
+}
+
+.key svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* --- dialogs -------------------------------------------------------------- */
+
+.sheet {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.sheet[open] {
+  position: fixed;
+  inset: auto 0 0 0;
+  margin: 0;
+  width: 100%;
+  display: block;
+  animation: slide-up 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.sheet[open]::after {
+  content: '';
+}
+
+.sheet > * {
+  position: relative;
+  z-index: 1;
+}
+
+.sheet[open] {
+  background: var(--bg-raised);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-top: 1px solid var(--line);
+  padding: 20px 20px calc(var(--safe-b) + 20px);
+  max-height: 92dvh;
+  overflow-y: auto;
+}
+
+@media (min-width: 560px) {
+  .sheet[open] {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: min(480px, calc(100vw - 32px));
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    animation: none;
+  }
+}
+
+.sheet-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sheet-subtitle {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.btn {
+  flex: 1;
+  min-height: 48px;
+  border-radius: var(--radius);
+  background: var(--key-bg);
+  color: var(--text);
+  font-weight: 650;
+  font-size: 15px;
+  border: 1px solid var(--line);
+}
+
+.btn:active {
+  background: var(--key-active);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+.btn-primary:active {
+  filter: brightness(0.92);
+  background: var(--accent);
+}
+
+/* --- win sheet ------------------------------------------------------------ */
+
+.win-quote {
+  margin: 14px 0 6px;
+  padding: 0;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.win-quote::before { content: '\201C'; }
+.win-quote::after { content: '\201D'; }
+
+.win-author {
+  margin: 0;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.win-stats,
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 20px 0 0;
+}
+
+.stat-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.win-stats div,
+.stat-grid div {
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.win-stats dt,
+.stat-grid dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  font-weight: 650;
+}
+
+.win-stats dd,
+.stat-grid dd {
+  margin: 3px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.win-note {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--warn);
+  min-height: 1.2em;
+}
+
+.win-note:empty {
+  display: none;
+}
+
+/* --- segmented controls --------------------------------------------------- */
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+
+.seg {
+  flex: 1;
+  min-height: 42px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.seg[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.hint-text {
+  margin: 8px 2px 0;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  min-height: 1.2em;
+}
+
+.muted {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.how-to {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.how-to summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--text);
+  list-style: none;
+  padding: 4px 0;
+}
+
+.how-to summary::-webkit-details-marker {
+  display: none;
+}
+
+.how-to summary::after {
+  content: ' \25BE';
+  color: var(--text-faint);
+}
+
+.how-to[open] summary::after {
+  content: ' \25B4';
+}
+
+.how-to p {
+  margin: 10px 0 0;
+  line-height: 1.55;
+}
+
+.how-to b {
+  color: var(--text);
+}
+
+/* --- toast ---------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-b) + 25dvh);
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 550;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  z-index: 50;
+  pointer-events: none;
+  animation: toast-in 0.18s ease;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* --- confetti ------------------------------------------------------------- */
+/* Pure CSS. A handful of absolutely positioned chips, no library. */
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.confetti i {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  opacity: 0;
+  animation: fall 1.5s ease-in forwards;
+}
+
+@keyframes fall {
+  0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(60dvh) rotate(540deg); }
+}
+
+/* --- accessibility -------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Very short screens: reclaim vertical space from the keyboard and toolbar. */
+@media (max-height: 620px) {
+  .key { height: 40px; }
+  .tool-btn { min-height: 38px; padding: 4px 2px; }
+  .author { margin-top: 12px; }
+  .stage { padding: 10px 8px; }
+}

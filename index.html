@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover for notch/home-indicator insets; maximum-scale stops
+         double-tap zoom, which otherwise fires constantly on a grid of buttons. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <meta name="description" content="A cryptogram puzzle game. Decode the quote, one letter at a time." />
+    <meta name="theme-color" content="#12141c" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cryptogram" />
+
+    <title>Cryptogram</title>
+
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <button class="icon-btn" id="btn-menu" type="button" aria-label="Menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+
+        <div class="topbar-center">
+          <span class="mode-label" id="mode-label">Daily</span>
+          <span class="topbar-sub">
+            <span id="difficulty-label">Medium</span>
+            <span class="dot" aria-hidden="true">&middot;</span>
+            <span id="timer" aria-label="Elapsed time">0:00</span>
+          </span>
+        </div>
+
+        <button class="icon-btn" id="btn-stats" type="button" aria-label="Statistics">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 20V10M12 20V4M19 20v-6" />
+          </svg>
+        </button>
+      </header>
+
+      <main class="stage">
+        <div class="puzzle" id="puzzle" role="group" aria-label="Cryptogram puzzle"></div>
+        <p class="author" id="author" aria-live="polite"></p>
+      </main>
+
+      <div class="toolbar" id="toolbar">
+        <button class="tool-btn" id="btn-hint" type="button">
+          <span class="tool-icon" aria-hidden="true">&#128161;</span>
+          <span class="tool-label">Hint</span>
+        </button>
+        <button class="tool-btn" id="btn-check" type="button">
+          <span class="tool-icon" aria-hidden="true">&#10003;</span>
+          <span class="tool-label">Check</span>
+        </button>
+        <button class="tool-btn" id="btn-clear" type="button">
+          <span class="tool-icon" aria-hidden="true">&#8635;</span>
+          <span class="tool-label">Reset</span>
+        </button>
+        <button class="tool-btn" id="btn-new" type="button">
+          <span class="tool-icon" aria-hidden="true">&#9654;</span>
+          <span class="tool-label">New</span>
+        </button>
+      </div>
+
+      <div class="keyboard" id="keyboard" role="group" aria-label="Letter keyboard"></div>
+    </div>
+
+    <!-- Win -->
+    <dialog class="sheet" id="dlg-win" aria-labelledby="win-title">
+      <div class="confetti" id="confetti" aria-hidden="true"></div>
+      <h2 class="sheet-title" id="win-title">Solved!</h2>
+      <blockquote class="win-quote" id="win-quote"></blockquote>
+      <p class="win-author" id="win-author"></p>
+      <dl class="win-stats">
+        <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
+        <div><dt>Hints</dt><dd id="win-hints">0</dd></div>
+        <div><dt>Streak</dt><dd id="win-streak">0</dd></div>
+      </dl>
+      <p class="win-note" id="win-note"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-primary" id="btn-win-next" type="button">Next puzzle</button>
+        <button class="btn" id="btn-win-close" type="button">Close</button>
+      </div>
+    </dialog>
+
+    <!-- Stats -->
+    <dialog class="sheet" id="dlg-stats" aria-labelledby="stats-title">
+      <h2 class="sheet-title" id="stats-title">Statistics</h2>
+      <dl class="stat-grid">
+        <div><dt>Played</dt><dd id="stat-played">0</dd></div>
+        <div><dt>Solved</dt><dd id="stat-solved">0</dd></div>
+        <div><dt>Win rate</dt><dd id="stat-rate">0%</dd></div>
+        <div><dt>Streak</dt><dd id="stat-streak">0</dd></div>
+        <div><dt>Best streak</dt><dd id="stat-maxstreak">0</dd></div>
+        <div><dt>Hints used</dt><dd id="stat-hints">0</dd></div>
+      </dl>
+      <h3 class="sheet-subtitle">Best times <span class="muted">(no hints)</span></h3>
+      <dl class="stat-grid stat-grid-3">
+        <div><dt>Easy</dt><dd id="stat-best-easy">&mdash;</dd></div>
+        <div><dt>Medium</dt><dd id="stat-best-medium">&mdash;</dd></div>
+        <div><dt>Hard</dt><dd id="stat-best-hard">&mdash;</dd></div>
+      </dl>
+      <div class="sheet-actions">
+        <button class="btn" id="btn-reset-stats" type="button">Reset stats</button>
+        <button class="btn btn-primary" id="btn-stats-close" type="button">Done</button>
+      </div>
+    </dialog>
+
+    <!-- Menu -->
+    <dialog class="sheet" id="dlg-menu" aria-labelledby="menu-title">
+      <h2 class="sheet-title" id="menu-title">Cryptogram</h2>
+
+      <h3 class="sheet-subtitle">Mode</h3>
+      <div class="segmented" id="seg-mode" role="group" aria-label="Game mode">
+        <button class="seg" type="button" data-mode="daily">Daily</button>
+        <button class="seg" type="button" data-mode="free">Free play</button>
+      </div>
+
+      <h3 class="sheet-subtitle">Difficulty</h3>
+      <div class="segmented" id="seg-difficulty" role="group" aria-label="Difficulty">
+        <button class="seg" type="button" data-difficulty="easy">Easy</button>
+        <button class="seg" type="button" data-difficulty="medium">Medium</button>
+        <button class="seg" type="button" data-difficulty="hard">Hard</button>
+      </div>
+      <p class="hint-text" id="difficulty-note"></p>
+
+      <h3 class="sheet-subtitle">Theme</h3>
+      <div class="segmented" id="seg-theme" role="group" aria-label="Theme">
+        <button class="seg" type="button" data-theme="auto">Auto</button>
+        <button class="seg" type="button" data-theme="dark">Dark</button>
+        <button class="seg" type="button" data-theme="light">Light</button>
+      </div>
+
+      <details class="how-to">
+        <summary>How to play</summary>
+        <p>
+          Every letter has been swapped for another one, consistently, all the way
+          through the quote. Tap a coded letter, then tap the letter you think it
+          stands for &mdash; every copy of it updates at once.
+        </p>
+        <p>
+          Start with the short words. A one-letter word is almost always
+          <b>A</b> or <b>I</b>. The most common letter is usually <b>E</b>. Look for
+          <b>THE</b>, and for a letter after an apostrophe &mdash; that is usually
+          <b>S</b> or <b>T</b>.
+        </p>
+        <p class="muted">
+          Amber means you have used the same letter twice. Since no two coded
+          letters share an answer, one of them is wrong.
+        </p>
+      </details>
+
+      <div class="sheet-actions">
+        <button class="btn btn-primary" id="btn-menu-close" type="button">Done</button>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
