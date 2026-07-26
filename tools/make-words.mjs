@@ -1,21 +1,22 @@
-// Generates src/words.js for Fiver from the system dictionary.
+// Generates src/words.js from the system dictionary, for Fiver (five letters)
+// and Word Ladder (four).
 //
 // Run: node tools/make-words.mjs
 //
 // The output is committed, so the app never depends on this machine's
-// dictionaries. Re-run only when changing the filters or the blocklist.
+// dictionaries. Re-run only when changing the filters or the blocklists.
 //
 // Inputs (Debian: wamerican, cracklib-runtime):
 //   /usr/share/dict/american-english   SCOWL-derived, ~104k words
 //   /usr/share/dict/cracklib-small     used purely as a "commonness" proxy
 //
-// Two lists come out:
-//   GUESSES  every five-letter word, i.e. what the game will accept as a guess
-//   ANSWERS  a common subset, i.e. what it will actually ask you to find
+// Four lists come out, two per game, and the same split is behind both:
+//   GUESSES / LADDER_WORDS    every word of that length -- what will be accepted
+//   ANSWERS / LADDER_COMMON   a common subset -- what the game itself will show
 //
 // The split matters: accepting only common words makes the game feel broken when
-// a real word is rejected, while drawing answers from the full list produces
-// miserable puzzles like CALKS or CLIPT.
+// a real word is rejected, while drawing puzzles from the full list produces
+// miserable ones like CALKS or CLIPT.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -54,6 +55,68 @@ const BLOCKLIST = new Set([
   'xylem', 'yokel', 'zebus', 'tromp', 'twain', 'unhip', 'vends', 'wonts',
 ]);
 
+// Vulgarity and slurs, stripped from every list at both lengths.
+//
+// The dictionaries are a spellchecker corpus and a password cracker's corpus,
+// so both carry the lot. Without this, Fiver will hand you WHORE as the daily --
+// it was in the shipped answer pool -- and four letters is where most of the
+// rest lives, so Word Ladder would be far worse.
+//
+// Filtered from the accepted lists too, not just the shown ones. Rejecting a
+// real word normally "feels like a bug", which is why GUESSES is deliberately
+// wide, but that argument does not survive contact with a slur appearing on a
+// board someone's kid is looking at. These are rare enough in play that nobody
+// will notice the refusal.
+//
+// Deliberately NOT here: ordinary vocabulary that merely sounds rude out of
+// context -- BALLS, NAKED, SCREW, RANDY, LUSTY, KILL, DEAD, DUMB, HELL, DAMN,
+// BUTT, KNOB. Over-filtering makes the word lists worse and the game prudish.
+const PROFANITY = new Set([
+  'anus', 'bimbo', 'bitch', 'boner', 'boob', 'boobs', 'chink', 'clit', 'cock',
+  'coon', 'coons', 'crap', 'craps', 'cunt', 'cunts', 'dick', 'dyke', 'dykes',
+  'fags', 'fanny', 'fart', 'farts', 'fuck', 'fucks', 'gook', 'gooks', 'hoes',
+  'horny', 'muff', 'nigga', 'nudes', 'orgy', 'penis', 'pimp', 'piss', 'poop',
+  'poops', 'porn', 'porno', 'prick', 'pussy', 'queer', 'rape', 'semen', 'shag',
+  'shit', 'shits', 'slag', 'slut', 'smut', 'tits', 'turd', 'turds', 'wank',
+  'wanks', 'whore',
+]);
+
+// Four-letter words that survive the "commonness" intersection but should never
+// be a ladder rung or endpoint.
+//
+// cracklib-small is a password cracker's corpus, which makes it a decent
+// commonness proxy at five letters and a poor one at four: it happily contains
+// LOGE, SLOE, LASE, WALE and FINK, and the machine has no frequency list to do
+// better with (aspell's "en-common" means common to all English *variants*, not
+// common by usage -- it has 120k entries). So this is curated by hand, the same
+// way Fiver's BLOCKLIST is, and grows as bad ones surface in play.
+//
+// Grouped by why they are out: archaic or literary, technical, dialect, Latin,
+// abbreviations, and roman numerals -- BLVD, IBID, CORP, SITU and VIII were all
+// in the pool and would have made nonsense ladders.
+const LADDER_BLOCKLIST = new Set([
+  'abed', 'agar', 'agog', 'ague', 'alga', 'anal', 'anon', 'apse', 'ashy', 'aver',
+  'axon', 'bade', 'bate', 'baud', 'beck', 'berg', 'bevy', 'bide', 'bier', 'bilk',
+  'blat', 'blvd', 'bogy', 'bole', 'boll', 'bong', 'boor', 'brad', 'brig', 'burg',
+  'burr', 'cant', 'chad', 'chit', 'cloy', 'coda', 'coed', 'coot', 'corp', 'craw',
+  'dale', 'daub', 'dell', 'dewy', 'dike', 'dint', 'doff', 'dolt', 'dour', 'dram',
+  'drub', 'duff', 'dyer', 'eave', 'eddy', 'eked', 'ergo', 'espy', 'fain', 'faun',
+  'fest', 'fief', 'fife', 'fink', 'flub', 'flue', 'foci', 'fogy', 'furl', 'gaff',
+  'gage', 'geld', 'gibe', 'gild', 'gilt', 'gird', 'girt', 'hale', 'hank', 'hart',
+  'hasp', 'hath', 'heft', 'hewn', 'hick', 'hock', 'hove', 'hued', 'ibex', 'ibid',
+  'jibe', 'jilt', 'john', 'jowl', 'jute', 'lain', 'lank', 'lase', 'lath', 'laud',
+  'laze', 'lien', 'lilt', 'loam', 'loci', 'loge', 'loll', 'lope', 'lyre', 'mart',
+  'mead', 'meld', 'mesa', 'mete', 'mica', 'mien', 'miff', 'mike', 'moll', 'molt',
+  'morn', 'mung', 'murk', 'nape', 'nary', 'nave', 'nigh', 'pate', 'peal', 'peed',
+  'pend', 'pent', 'pica', 'pith', 'pixy', 'pooh', 'posy', 'prig', 'prow', 'purl',
+  'quay', 'rend', 'rhea', 'rick', 'rill', 'rime', 'roil', 'rood', 'rout', 'rove',
+  'rube', 'ruff', 'rusk', 'sago', 'sate', 'scat', 'scow', 'scud', 'sera', 'shad',
+  'shim', 'shod', 'situ', 'sloe', 'soya', 'spec', 'tabu', 'tamp', 'teat', 'tern',
+  'tine', 'tong', 'tony', 'trig', 'troy', 'vale', 'viii', 'vise', 'viva', 'wack',
+  'wadi', 'wale', 'weal', 'weir', 'whir', 'whit', 'wile', 'wino', 'wive', 'wont',
+  'yawl', 'yore',
+]);
+
 function readWords(path) {
   try {
     return readFileSync(path, 'utf8').split('\n');
@@ -67,11 +130,21 @@ function readWords(path) {
 // Test the word as written, without lowercasing first: the dictionary holds
 // proper nouns and possessives too, and folding case would let Aaron and Wales
 // through as ordinary words.
-const fiveLetter = (words) =>
-  new Set(words.map((w) => w.trim()).filter((w) => /^[a-z]{5}$/.test(w)));
+const ofLength = (words, n) =>
+  new Set(
+    words
+      .map((w) => w.trim())
+      .filter((w) => new RegExp(`^[a-z]{${n}}$`).test(w))
+      .filter((w) => !PROFANITY.has(w))
+  );
 
-const guesses = fiveLetter(readWords(DICT));
-const common = fiveLetter(readWords(COMMON));
+const dictWords = readWords(DICT);
+const commonWords = readWords(COMMON);
+
+// --- Fiver: five letters ----------------------------------------------------
+
+const guesses = ofLength(dictWords, 5);
+const common = ofLength(commonWords, 5);
 
 const answers = [...guesses]
   .filter((w) => common.has(w))
@@ -83,12 +156,38 @@ const answers = [...guesses]
 
 const sortedGuesses = [...guesses].sort();
 
-// Every answer must be an acceptable guess, or the game could refuse its own
+// --- Word Ladder: four letters ----------------------------------------------
+//
+// LADDER_COMMON is both the endpoint pool and the graph the generator walks, so
+// the guaranteed shortest path only ever runs through words a player knows.
+// LADDER_WORDS is wider and is what a typed rung is checked against, so taking
+// your own route through a legal-but-uncommon word is never refused.
+//
+// Plurals are dropped from the common pool because a ladder that is really
+// "add an S" is not a puzzle.
+
+const ladderWords = ofLength(dictWords, 4);
+const ladderCommonSet = ofLength(commonWords, 4);
+
+const ladderCommon = [...ladderWords]
+  .filter((w) => ladderCommonSet.has(w))
+  .filter((w) => !/s$/.test(w))
+  .filter((w) => !LADDER_BLOCKLIST.has(w))
+  .sort();
+
+const sortedLadderWords = [...ladderWords].sort();
+
+// Every shown word must also be an accepted one, or a game could refuse its own
 // solution. Cheap to assert here rather than discover in play.
-const orphans = answers.filter((w) => !guesses.has(w));
-if (orphans.length) {
-  console.error(`answers missing from guesses: ${orphans.join(', ')}`);
-  process.exit(1);
+for (const [label, shown, accepted] of [
+  ['answers', answers, guesses],
+  ['ladder endpoints', ladderCommon, ladderWords],
+]) {
+  const orphans = shown.filter((w) => !accepted.has(w));
+  if (orphans.length) {
+    console.error(`${label} missing from the accepted list: ${orphans.join(', ')}`);
+    process.exit(1);
+  }
 }
 
 const chunk = (words) =>
@@ -101,11 +200,19 @@ const chunk = (words) =>
     .map((line) => `  '${line.join(" ")}',`)
     .join('\n');
 
-const out = `// Word lists for Fiver. GENERATED by tools/make-words.mjs -- do not edit by hand.
+const out = `// Word lists. GENERATED by tools/make-words.mjs -- do not edit by hand.
 //
-// ANSWERS (${answers.length}) is the pool the game draws puzzles from: common words only.
-// GUESSES (${sortedGuesses.length}) is everything it will accept you typing, which is much wider,
-// because rejecting a real word feels like a bug even when the word is obscure.
+// Fiver, five letters:
+//   ANSWERS (${answers.length}) is the pool it draws puzzles from: common words only.
+//   GUESSES (${sortedGuesses.length}) is everything it accepts you typing, which is much wider,
+//   because rejecting a real word feels like a bug even when the word is obscure.
+//
+// Word Ladder, four letters:
+//   LADDER_COMMON (${ladderCommon.length}) is the endpoint pool and the graph the generator
+//   walks, so the guaranteed shortest path only runs through familiar words.
+//   LADDER_WORDS (${sortedLadderWords.length}) is what a typed rung is checked against.
+//
+// Vulgarity and slurs are stripped from all four; see PROFANITY in the script.
 //
 // Stored as space-joined strings to keep the file readable and the payload small.
 //
@@ -120,16 +227,32 @@ const GUESS_DATA = [
 ${chunk(sortedGuesses)}
 ].join(' ');
 
-/** @type {string[]} common five-letter words, the puzzle pool */
+const LADDER_COMMON_DATA = [
+${chunk(ladderCommon)}
+].join(' ');
+
+const LADDER_WORD_DATA = [
+${chunk(sortedLadderWords)}
+].join(' ');
+
+/** @type {string[]} common five-letter words, the Fiver puzzle pool */
 export const ANSWERS = ANSWER_DATA.split(' ');
 
-/** @type {Set<string>} every five-letter word the game accepts as a guess */
+/** @type {Set<string>} every five-letter word Fiver accepts as a guess */
 export const GUESSES = new Set(GUESS_DATA.split(' '));
+
+/** @type {string[]} common four-letter words: ladder endpoints and path graph */
+export const LADDER_COMMON = LADDER_COMMON_DATA.split(' ');
+
+/** @type {Set<string>} every four-letter word Word Ladder accepts as a rung */
+export const LADDER_WORDS = new Set(LADDER_WORD_DATA.split(' '));
 `;
 
 const target = join(ROOT, 'src', 'words.js');
 writeFileSync(target, out);
 console.log(`wrote ${target}`);
-console.log(`  answers: ${answers.length}`);
-console.log(`  guesses: ${sortedGuesses.length}`);
-console.log(`  size:    ${(out.length / 1024).toFixed(1)}KB raw`);
+console.log(`  answers:       ${answers.length}`);
+console.log(`  guesses:       ${sortedGuesses.length}`);
+console.log(`  ladder common: ${ladderCommon.length}`);
+console.log(`  ladder words:  ${sortedLadderWords.length}`);
+console.log(`  size:          ${(out.length / 1024).toFixed(1)}KB raw`);

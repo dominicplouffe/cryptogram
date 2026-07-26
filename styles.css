@@ -910,6 +910,62 @@ svg {
   box-shadow: none;
 }
 
+/* --- Word Ladder board ---------------------------------------------------- */
+
+.ladder-board {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ladder-row {
+  display: flex;
+  gap: 5px;
+}
+
+/* Smaller than Fiver's tiles: a long ladder is more rows than Fiver ever has,
+   and the whole climb should stay on screen. */
+.ladder-row .tile {
+  width: min(48px, 12vw);
+  height: min(48px, 12vw);
+  font-size: min(24px, 6vw);
+}
+
+/* Where you started: present, but not something you are working on. */
+.ladder-row.is-start .tile {
+  background: var(--key-bg);
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+/* Where you are heading, pinned at the bottom of the board. */
+.ladder-row.is-goal .tile {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The one letter that moved on this step, so the ladder reads back at a glance. */
+.tile.is-changed {
+  color: var(--locked);
+}
+
+.ladder-row.is-goal .tile.is-changed {
+  color: var(--locked);
+  border-color: var(--locked);
+}
+
+/* Stands in for "an unknown number of steps still to go", so the goal sitting
+   directly below never reads as one move away. */
+.ladder-gap {
+  height: 16px;
+  line-height: 16px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
 /* A single-row keyboard (the vowel pad) would otherwise stretch each key to a
    fifth of the screen. */
 .keyboard-wide .krow {

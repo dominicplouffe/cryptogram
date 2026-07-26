@@ -7,9 +7,10 @@
 
 import { cryptogram } from './cryptogram.js';
 import { fiver } from './fiver.js';
+import { ladder } from './ladder.js';
 import { vowels } from './vowels.js';
 
-export const GAMES = [cryptogram, fiver, vowels];
+export const GAMES = [cryptogram, fiver, vowels, ladder];
 
 export const GAME_IDS = GAMES.map((g) => g.id);
 

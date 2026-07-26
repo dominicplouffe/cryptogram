@@ -7,10 +7,12 @@ import assert from 'node:assert/strict';
 import { cryptogram } from '../src/games/cryptogram.js';
 import { vowels, stripVowels, vowelSlots, VOWELS } from '../src/games/vowels.js';
 import { fiver } from '../src/games/fiver.js';
+import { ladder } from '../src/games/ladder.js';
+import { LADDER_COMMON, LADDER_WORDS } from '../src/words.js';
 import { QUOTES } from '../src/quotes.js';
 import { distinctLetters } from '../src/cipher.js';
 
-const GAMES = [cryptogram, fiver, vowels];
+const GAMES = [cryptogram, fiver, vowels, ladder];
 
 // --- the shared contract ----------------------------------------------------
 
@@ -361,4 +363,156 @@ test('Missing Vowels home card counts vowels filled', () => {
 test('Missing Vowels uses a five-key pad', () => {
   assert.deepEqual(vowels.keyboard.rows, ['AEIOU']);
   assert.equal(vowels.keyboard.del, true);
+});
+
+// --- Word Ladder ------------------------------------------------------------
+
+const LADDER = (difficulty = 'medium', dateKey = '2026-08-01') =>
+  ladder.createGame({ mode: 'daily', difficulty, dateKey });
+
+test('a generated ladder is solvable in exactly par steps', () => {
+  // The whole puzzle rests on this: par is not a guess, it is the length of a
+  // path the generator found. Walk it with the game's own hint to prove it.
+  for (const [difficulty, steps] of [['easy', 3], ['medium', 4], ['hard', 5]]) {
+    for (let d = 1; d <= 12; d++) {
+      const dateKey = `2026-08-${String(d).padStart(2, '0')}`;
+      const game = LADDER(difficulty, dateKey);
+
+      assert.equal(game.par, steps, `${difficulty} ${dateKey}: par is not ${steps}`);
+      assert.notEqual(game.start, game.goal, `${difficulty} ${dateKey}: start is the goal`);
+      assert.equal(ladder.isSolved(game), false, `${difficulty} ${dateKey} arrived solved`);
+
+      for (let i = 0; i < steps; i++) ladder.hint(game);
+      assert.equal(ladder.isSolved(game), true, `${difficulty} ${dateKey} not solved in par`);
+      assert.equal(game.rungs.length, steps, `${difficulty} ${dateKey} took a detour`);
+    }
+  }
+});
+
+test('every step of a hinted ladder is a real word one letter from the last', () => {
+  const game = LADDER('hard');
+  for (let i = 0; i < game.par; i++) ladder.hint(game);
+
+  let previous = game.start;
+  for (const rung of game.rungs) {
+    assert.ok(LADDER_WORDS.has(rung), `${rung} is not in the word list`);
+    assert.equal(rung.length, 4);
+    const diffs = [...rung].filter((ch, i) => ch !== previous[i]).length;
+    assert.equal(diffs, 1, `${previous} -> ${rung} changed ${diffs} letters`);
+    previous = rung;
+  }
+});
+
+test('Word Ladder endpoints are drawn from the common pool', () => {
+  // Obscure words are fine mid-ladder but not as the two you are shown.
+  for (let d = 1; d <= 10; d++) {
+    const game = LADDER('medium', `2026-09-${String(d).padStart(2, '0')}`);
+    assert.ok(LADDER_COMMON.includes(game.start), `${game.start} is not common`);
+    assert.ok(LADDER_COMMON.includes(game.goal), `${game.goal} is not common`);
+  }
+});
+
+test('Word Ladder rejects a step that is not one letter away', () => {
+  const game = LADDER();
+  game.current = game.start; // same word, zero letters changed
+  assert.match(ladder.commit(game).toast, /already on the ladder/);
+
+  // Two letters at once.
+  const twoAway = [...LADDER_WORDS].find((w) => {
+    const diffs = [...w].filter((ch, i) => ch !== game.start[i]).length;
+    return diffs === 2;
+  });
+  game.current = twoAway;
+  assert.match(ladder.commit(game).toast, /exactly one letter/);
+  assert.equal(game.rungs.length, 0);
+});
+
+test('Word Ladder rejects a non-word and an unfinished row', () => {
+  const game = LADDER();
+  game.current = 'zzz';
+  assert.match(ladder.commit(game).toast, /Not enough letters/);
+
+  game.current = 'zzzz';
+  assert.match(ladder.commit(game).toast, /not in the word list/);
+  assert.equal(game.rungs.length, 0);
+});
+
+test('Word Ladder refuses to revisit a word already on the ladder', () => {
+  // Without this a ladder can oscillate between two words forever and the board
+  // reads as broken.
+  const game = LADDER();
+  ladder.hint(game);
+  const used = game.rungs[0];
+
+  ladder.hint(game);
+  game.current = used;
+  assert.match(ladder.commit(game).toast, /already on the ladder/);
+});
+
+test('Word Ladder delete backs out of a row, then off the ladder', () => {
+  const game = LADDER();
+  ladder.hint(game);
+  assert.equal(game.rungs.length, 1);
+
+  game.current = 'ab';
+  ladder.onKey(game, 'DEL');
+  assert.equal(game.current, 'a', 'should trim the row first');
+  ladder.onKey(game, 'DEL');
+  assert.equal(game.current, '');
+
+  // Now the row is empty, so delete undoes the step above it.
+  assert.match(ladder.deleteLetter(game).toast, /Removed/);
+  assert.equal(game.rungs.length, 0);
+  assert.deepEqual(ladder.deleteLetter(game), {}, 'nothing left to remove');
+});
+
+test('Word Ladder never reports a loss', () => {
+  const game = LADDER();
+  assert.equal(ladder.isLost(game), false);
+  for (let i = 0; i < game.par; i++) ladder.hint(game);
+  assert.equal(ladder.isLost(game), false);
+});
+
+test('Word Ladder counts hints and reports the chain when solved', () => {
+  const game = LADDER('easy');
+  for (let i = 0; i < game.par; i++) ladder.hint(game);
+  assert.equal(game.hintsUsed, game.par);
+
+  const outcome = ladder.outcomeContent(game);
+  assert.match(outcome.title, /Perfect ladder/, 'par exactly should read as par');
+  assert.ok(outcome.body.startsWith(game.start.toUpperCase()), 'chain starts at the start word');
+  assert.ok(outcome.body.endsWith(game.goal.toUpperCase()), 'chain ends at the goal');
+  assert.equal(outcome.body.split(' → ').length, game.par + 1);
+});
+
+test('Word Ladder home card counts steps taken', () => {
+  assert.equal(ladder.statusFor(null, { difficultyLabel: 'Medium' }).state, 'new');
+
+  const game = LADDER();
+  assert.equal(ladder.statusFor(ladder.toSnapshot(game), { difficultyLabel: 'Medium' }).state, 'new');
+
+  ladder.hint(game);
+  const progress = ladder.statusFor(ladder.toSnapshot(game), { difficultyLabel: 'Medium' });
+  assert.equal(progress.state, 'progress');
+  assert.match(progress.text, /1 step\b/);
+  assert.equal(progress.action, 'Continue');
+
+  while (!ladder.isSolved(game)) ladder.hint(game);
+  const solved = ladder.statusFor(ladder.toSnapshot(game), { difficultyLabel: 'Medium' });
+  assert.equal(solved.state, 'solved');
+  assert.match(solved.text, /Solved in \d+ steps/);
+});
+
+test('a saved ladder restores the same climb', () => {
+  const game = LADDER();
+  ladder.hint(game);
+  ladder.hint(game);
+  game.current = 'ab';
+
+  const restored = ladder.hydrate(ladder.toSnapshot(game));
+  assert.equal(restored.start, game.start);
+  assert.equal(restored.goal, game.goal);
+  assert.equal(restored.par, game.par);
+  assert.deepEqual(restored.rungs, game.rungs);
+  assert.equal(restored.current, 'ab');
 });

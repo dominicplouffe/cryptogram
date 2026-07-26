@@ -9,6 +9,11 @@ backend.
   amber is in the word but elsewhere, grey is not in the word.
 - **Missing Vowels** — every A, E, I, O and U taken out of a quote. Put them back.
   Y is left alone.
+- **Word Ladder** — get from one four-letter word to another by changing a single
+  letter at a time: COLD, CORD, CARD, WARD, WARM. Four letters and not five
+  because the "one letter apart" graph is far denser there, which is what makes
+  ladders exist at all. Par is the shortest route through familiar words, and
+  there is no way to lose.
 
 ## Play locally
 
@@ -25,10 +30,11 @@ because ES modules require HTTP.
 npm test           # node --test, no dependencies
 ```
 
-118 tests over the cipher engine, storage and migration, the shared game
+129 tests over the cipher engine, storage and migration, the shared game
 contract, each game's rules — including the duplicate-letter cases that make
-Fiver's scoring easy to get wrong — and the two lists that have to stay in step
-with the registry (the offline precache and the shell's element ids).
+Fiver's scoring easy to get wrong, and proof that every generated ladder is
+solvable in exactly par — and the two lists that have to stay in step with the
+registry (the offline precache and the shell's element ids).
 
 ## Home screen
 
@@ -91,7 +97,7 @@ src/store.js            namespaced storage, per-game stats, streaks, migration
 src/render.js           quote grid + configurable keyboard
 src/cipher.js           seeded RNG, derangements, substitution
 src/quotes.js           the quote pack (shared by Cryptogram and Missing Vowels)
-src/words.js            GENERATED word lists for Fiver
+src/words.js            GENERATED word lists for Fiver and Word Ladder
 src/games/registry.js   the list of games that drives everything
 src/games/*.js          one module per game
 test/                   node --test suites
@@ -102,7 +108,7 @@ tools/make-words.mjs    regenerates src/words.js
 ## Adding a game
 
 1. Write a module in `src/games/` satisfying the same contract as the existing
-   three — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
+   four — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
    `isSolved`, `statusFor`, and so on. Alongside the rules it declares its own
    presentation: `name`, `blurb`, `icon`, a `category` for the filter chips, and
    `howTo`, the lines of plain prose its sheet shows.
@@ -142,11 +148,29 @@ on localhost logs a console warning for anything that breaks those rules.
 (`wamerican` and `cracklib-runtime` on Debian/Ubuntu). The output is committed, so
 the app never depends on those files being installed.
 
-It produces two lists, and the split matters: **2,267 common words** are the pool
-Fiver draws answers from, while **all 4,667 five-letter words** are accepted as
-guesses. Drawing answers from the full list gives miserable puzzles like `CALKS`;
-accepting only common words makes the game feel broken when a real word is
-rejected. Obscure answers that slip through go in the blocklist in that script.
+It produces four lists, two per game, and the same split is behind both: a common
+pool for what the game **shows** you, and a wider pool for what it **accepts**.
+Drawing puzzles from the full list gives miserable ones like `CALKS`; accepting
+only common words makes the game feel broken when a real word is rejected.
+
+| | shown | accepted |
+|---|---|---|
+| Fiver, five letters | `ANSWERS` 2,258 | `GUESSES` 4,640 |
+| Word Ladder, four letters | `LADDER_COMMON` 1,439 | `LADDER_WORDS` 2,413 |
+
+Two filters run over all four:
+
+- **Vulgarity and slurs.** The inputs are a spellchecker corpus and a password
+  cracker's corpus, so both carry the lot — Fiver's answer pool shipped with
+  `WHORE` in it until this was added. Stripped from the accepted lists too, not
+  just the shown ones: a refused word is a far smaller cost than one appearing on
+  a board. Ordinary vocabulary that merely sounds rude out of context is
+  deliberately kept.
+- **A hand-curated four-letter blocklist.** `cracklib-small` is a decent
+  commonness proxy at five letters and a poor one at four, where it happily
+  contains `LOGE`, `SLOE`, `LASE` and `WALE`, plus `BLVD`, `IBID` and `VIII`.
+  There is no frequency list to do better with, so this is curated by hand and
+  grows as bad ones surface in play.
 
 The lists derive from SCOWL, whose licence permits redistribution provided its
 copyright notice travels along — it is reproduced at the top of `src/words.js`.
