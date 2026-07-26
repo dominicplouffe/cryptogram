@@ -1,10 +1,15 @@
 // Offline support.
 //
-// Cache-first on the app shell: the game is entirely static and self-contained,
-// so once it is cached there is no reason to hit the network at all. Bump
-// CACHE_VERSION on release to retire the old shell.
+// Network-first, cache as fallback -- deliberately NOT cache-first.
+//
+// Cache-first serves a stale app for one full load after every deploy, which in
+// practice meant a returning player got the previous version of the game and had
+// to reload to see the current one. The whole app is well under a megabyte, so
+// preferring the network costs a few tens of milliseconds and removes that class
+// of bug entirely. The cache is still a complete copy, so offline play is
+// unaffected.
 
-const CACHE_VERSION = 'plouffe-word-games-v2';
+const CACHE_VERSION = 'plouffe-word-games-v3';
 
 // Relative paths so the worker also works from a GitHub Pages subdirectory.
 const SHELL = [
@@ -35,12 +40,21 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((names) =>
-        Promise.all(names.filter((name) => name !== CACHE_VERSION).map((name) => caches.delete(name)))
-      )
-      .then(() => self.clients.claim())
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names.filter((name) => name !== CACHE_VERSION).map((name) => caches.delete(name))
+      );
+      await self.clients.claim();
+
+      // Deliberately NOT calling client.navigate() to force open pages to
+      // reload here. It would fix the one transitional load where a page is
+      // still running the previous version's scripts, but it can also reload a
+      // player mid-puzzle, and it is unsupported on Safari. Network-first
+      // fetching below means that transitional load is the only stale one; the
+      // page-side controllerchange handler in main.js covers it from the next
+      // release onward.
+    })()
   );
 });
 
@@ -52,33 +66,24 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        // Serve immediately, then quietly refresh for the next load.
-        event.waitUntil(
-          fetch(request)
-            .then((response) => {
-              if (response.ok) return caches.open(CACHE_VERSION).then((c) => c.put(request, response));
-            })
-            .catch(() => {
-              /* offline: the cached copy stands */
-            })
-        );
-        return cached;
-      }
-
-      return fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.put(request, copy)));
-          }
-          return response;
-        })
-        .catch(() =>
-          // A navigation that misses the cache while offline still gets the app.
-          request.mode === 'navigate' ? caches.match('index.html') : Response.error()
-        );
-    })
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy)));
+        }
+        return response;
+      })
+      .catch(async () => {
+        // Offline: fall back to the cached copy.
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        // A navigation with no exact match still gets the app shell.
+        if (request.mode === 'navigate') {
+          const shell = await caches.match('index.html');
+          if (shell) return shell;
+        }
+        return Response.error();
+      })
   );
 });

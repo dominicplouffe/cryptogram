@@ -320,7 +320,11 @@ function showWin() {
 
   const best = stats.bestTimes[game.difficulty];
   let note = '';
-  if (game.hintsUsed > 0) {
+  if (game.mode === 'free') {
+    // Without this, a run of free-play solves looks like a broken streak
+    // counter rather than a counter measuring something else.
+    note = 'Free play. Solve the Daily to build your streak.';
+  } else if (game.hintsUsed > 0) {
     note = 'Best times only count hint-free solves.';
   } else if (best === game.elapsedMs) {
     note = `New best time for ${DIFFICULTIES[game.difficulty].label}!`;
@@ -678,6 +682,13 @@ function boot() {
   keys = buildKeyboard(dom.keyboard);
   wireEvents();
 
+  // history.state survives a reload, so refreshing inside a game would leave a
+  // stale {view:'game'} behind and make the back button navigate off the site.
+  // Boot always starts at home, so the entry must say so.
+  if (history.state?.view === 'game') {
+    history.replaceState({ view: 'home' }, '');
+  }
+
   // Land on home. No game is built until a card is tapped, which also keeps the
   // "played" count honest -- opening the app is not playing a puzzle.
   showView('home');
@@ -694,6 +705,18 @@ function boot() {
   // isSecureContext covers https and localhost, which is where service workers
   // are permitted to register at all.
   if ('serviceWorker' in navigator && window.isSecureContext) {
+    // The load that *discovers* a new worker is still served by the old one, so
+    // on an upgrade this page is showing stale assets. Reload once when the new
+    // worker takes control. Guarded two ways: only when a controller already
+    // existed (a first install must not reload), and only once per page.
+    const wasControlled = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!wasControlled || reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').catch(() => {
         /* offline support is a bonus, not a requirement */
