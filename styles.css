@@ -1271,10 +1271,12 @@ svg {
    while `place-items: center` pushed the overflow out of both sides at once.
    Real phone keyboards set their word keys in visibly smaller type; this does
    the same, and refuses to shrink below the label. */
-/* Higher specificity than `.key` so the letter size cannot win by source order.
-   The capitals live here too, alongside the size that makes them fit: split
-   across a script and a stylesheet, one can arrive without the other and the
-   label ends up wider than it started. */
+/* Unused at present -- ENTER and DEL are both icons -- and kept as a guard, so a
+   word-labelled key added later cannot overflow the way ENTER twice did.
+   Higher specificity than `.key` so the letter size cannot win by source order,
+   and the capitals live here beside the size that makes them fit: split across a
+   script and a stylesheet, one can arrive without the other and the label ends
+   up wider than it started. */
 .key.key-word {
   font-size: 11.5px;
   font-weight: 700;

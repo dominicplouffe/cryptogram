@@ -11,6 +11,14 @@ export const QWERTY_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
 /** Missing Vowels only ever needs five keys, so it gets much bigger targets. */
 export const VOWEL_ROWS = ['AEIOU'];
 
+// The return arrow, drawn rather than typed. The character U+21B5 is missing
+// from several Android system fonts and renders at wildly different weights in
+// the ones that have it; as an SVG it matches the delete key exactly.
+const ENTER_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M19 8v5H7"/>' +
+  '<path d="M11 9l-4 4 4 4"/></svg>';
+
 const DELETE_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true">' +
   '<path d="M20 5H9l-6 7 6 7h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/>' +
@@ -127,10 +135,12 @@ export function buildKeyboard(container, layout = {}) {
     key.type = 'button';
     const classes = ['key'];
     if (wide) classes.push('wide');
-    // A word-labelled key is set in its own, smaller type. Left at the letter
-    // size it does not fit the key on a narrow phone, and because a key is a
-    // centred grid that shrinks to nothing, the label escapes out of both sides
-    // rather than simply clipping.
+    // No key uses a word label today -- ENTER and DEL are both icons. This stays
+    // as a guard: a word left at the letter size does not fit a key on a narrow
+    // phone, and since a key is a centred grid that shrinks to nothing, the label
+    // escapes out of both sides instead of clipping. Anything multi-character
+    // added later gets the smaller type automatically rather than rediscovering
+    // that the hard way.
     if (!icon && label.length > 1) classes.push('key-word');
     key.className = classes.join(' ');
     key.dataset.key = name;
@@ -150,14 +160,9 @@ export function buildKeyboard(container, layout = {}) {
     const isLast = rowIndex === rows.length - 1;
 
     // ENTER sits left of the last row so DEL keeps its familiar right-hand spot.
-    // Spelled out rather than an arrow: the return glyph reads as "new line",
-    // which is not what this key does.
-    //
-    // Written in mixed case even though it renders uppercase. The capitals come
-    // from .key-word, which also shrinks the type to fit them. Capitalising here
-    // instead would widen the label from a file that can arrive without the rule
-    // that makes it fit, which is worse than doing nothing at all.
-    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'Enter' });
+    // ENTER sits left of the last row so DEL keeps its familiar right-hand spot.
+    // Both are icons, so neither can outgrow its key the way a word can.
+    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'Enter', icon: ENTER_ICON });
     for (const letter of letters) addKey(row, letter);
     if (isLast && wantsDelete) {
       addKey(row, 'DEL', { wide: true, label: 'Delete', icon: DELETE_ICON });
