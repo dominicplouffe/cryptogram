@@ -1085,7 +1085,22 @@ svg {
 }
 
 .key.wide {
-  flex: 1.6 1 0;
+  flex: 1.7 1 0;
+}
+
+/* Keys labelled with a word, not a letter or a glyph.
+   Two things kept ENTER from fitting: it inherited the 16px letter size, and
+   `.key` sets `min-width: 0`, so the key could shrink narrower than its own text
+   while `place-items: center` pushed the overflow out of both sides at once.
+   Real phone keyboards set their word keys in visibly smaller type; this does
+   the same, and refuses to shrink below the label. */
+.key-word {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0 4px;
+  white-space: nowrap;
+  min-width: fit-content;
 }
 
 .key svg {

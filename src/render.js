@@ -125,7 +125,14 @@ export function buildKeyboard(container, layout = {}) {
   const addKey = (row, name, { wide = false, label = name, icon = null } = {}) => {
     const key = document.createElement('button');
     key.type = 'button';
-    key.className = wide ? 'key wide' : 'key';
+    const classes = ['key'];
+    if (wide) classes.push('wide');
+    // A word-labelled key is set in its own, smaller type. Left at the letter
+    // size it does not fit the key on a narrow phone, and because a key is a
+    // centred grid that shrinks to nothing, the label escapes out of both sides
+    // rather than simply clipping.
+    if (!icon && label.length > 1) classes.push('key-word');
+    key.className = classes.join(' ');
     key.dataset.key = name;
     if (icon) {
       key.innerHTML = icon;
@@ -143,7 +150,9 @@ export function buildKeyboard(container, layout = {}) {
     const isLast = rowIndex === rows.length - 1;
 
     // ENTER sits left of the last row so DEL keeps its familiar right-hand spot.
-    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'Enter' });
+    // Spelled out rather than an arrow: the return glyph reads as "new line",
+    // which is not what this key does.
+    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'ENTER' });
     for (const letter of letters) addKey(row, letter);
     if (isLast && wantsDelete) {
       addKey(row, 'DEL', { wide: true, label: 'Delete', icon: DELETE_ICON });
