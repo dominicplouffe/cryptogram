@@ -8,9 +8,11 @@
 import { cryptogram } from './cryptogram.js';
 import { fiver } from './fiver.js';
 import { ladder } from './ladder.js';
+import { search } from './search.js';
 import { vowels } from './vowels.js';
+import { wheel } from './wheel.js';
 
-export const GAMES = [cryptogram, fiver, vowels, ladder];
+export const GAMES = [cryptogram, fiver, vowels, ladder, wheel, search];
 
 export const GAME_IDS = GAMES.map((g) => g.id);
 

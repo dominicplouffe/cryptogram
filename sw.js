@@ -9,7 +9,7 @@
 // of bug entirely. The cache is still a complete copy, so offline play is
 // unaffected.
 
-const CACHE_VERSION = 'plouffe-word-games-v8';
+const CACHE_VERSION = 'plouffe-word-games-v9';
 
 // Relative paths so the worker also works from a GitHub Pages subdirectory.
 const SHELL = [
@@ -27,6 +27,8 @@ const SHELL = [
   'src/games/cryptogram.js',
   'src/games/fiver.js',
   'src/games/ladder.js',
+  'src/games/search.js',
+  'src/games/wheel.js',
   'src/games/vowels.js',
   'icons/icon.svg',
   'icons/icon-192.png',
@@ -72,7 +74,14 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(request)
+    // `cache: 'no-cache'` revalidates instead of trusting the HTTP cache.
+    // Without it "network-first" is only worker-cache-first: GitHub Pages serves
+    // assets with a ten-minute max-age, so a plain fetch() could still be
+    // answered from the browser's HTTP cache. That produced a genuinely broken
+    // mixed state after a deploy -- new scripts running against the previous
+    // stylesheet. This still costs almost nothing, since an unchanged file comes
+    // back as a 304 with no body.
+    fetch(request, { cache: 'no-cache' })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();

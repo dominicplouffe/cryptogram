@@ -203,11 +203,20 @@ function openGame(mod, { fresh = false, mode } = {}) {
 
   active = { mod, game, settings };
 
-  // Rebuild the keyboard only when moving between games with different layouts.
-  if (keyboardOwner !== mod.id) {
-    keys = buildKeyboard(dom.keyboard, mod.keyboard);
-    keyboardOwner = mod.id;
+  // A game may declare keyboard: null and play entirely on the board -- Word
+  // Search does. The row of keys is then not just empty but gone, handing its
+  // height back to the grid.
+  if (mod.keyboard) {
+    // Rebuild only when moving between games with different layouts.
+    if (keyboardOwner !== mod.id) {
+      keys = buildKeyboard(dom.keyboard, mod.keyboard);
+      keyboardOwner = mod.id;
+    }
+  } else {
+    keys = null;
+    keyboardOwner = null;
   }
+  dom.keyboard.hidden = !mod.keyboard;
 
   for (const btn of dom.toolbar.querySelectorAll('[data-tool]')) {
     btn.hidden = !mod.tools.includes(btn.dataset.tool);
@@ -246,7 +255,7 @@ function paintGame() {
   const { mod, game, settings } = active;
 
   mod.paint(game);
-  mod.paintKeys(game, keys);
+  if (keys) mod.paintKeys(game, keys);
 
   dom.gameLabel.textContent = mod.name;
   const bits = [game.mode === 'daily' ? 'Daily' : 'Free play'];
@@ -780,10 +789,19 @@ function applyTheme() {
 
 function wireEvents() {
   dom.puzzle.addEventListener('click', (event) => {
-    const cell = event.target.closest('.cell');
+    // Any element carrying data-index is playable, not just .cell: Word Search
+    // draws a grid rather than the quote-shaped cells the other games use.
+    const cell = event.target.closest('[data-index]');
     if (!cell || !active || active.game.solved || active.game.lost) return;
-    active.mod.onSelect(active.game, Number(cell.dataset.index));
-    paintGame();
+
+    const result = active.mod.onSelect(active.game, Number(cell.dataset.index));
+
+    // Selecting a cell can finish a board -- in Word Search the second tap of a
+    // pair completes a word, and the last word wins. A module says so by
+    // returning a move result; the games where a tap only moves a cursor return
+    // nothing and are repainted without a save or an outcome check.
+    if (result) afterMove(result);
+    else paintGame();
   });
 
   dom.keyboard.addEventListener('click', (event) => {

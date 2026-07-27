@@ -256,11 +256,18 @@ const wheelSources = WHEEL_LENGTHS.flatMap((n) =>
   )
 ).sort();
 
+// At four and five letters the curated pools already exist, so reuse them
+// rather than going back to the raw cracklib intersection: those two lengths
+// have been through a hand blocklist that the intersection has not.
 const searchWords = spread(
-  sortedWords
-    .filter((w) => w.length >= 4 && w.length <= 8)
-    .filter((w) => commonAll.has(w))
-    .filter((w) => !/(s|ed)$/.test(w)),
+  [
+    ...ladderCommon,
+    ...answers,
+    ...sortedWords
+      .filter((w) => w.length >= 6 && w.length <= 8)
+      .filter((w) => commonAll.has(w))
+      .filter((w) => !/(s|ed)$/.test(w)),
+  ].sort(),
   SEARCH_CAP
 );
 

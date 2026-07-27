@@ -970,6 +970,181 @@ svg {
   font-size: 13px;
 }
 
+/* --- Word Wheel board ----------------------------------------------------- */
+
+.wheel-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* What you are typing. Holds its height when empty so the wheel below does not
+   jump on the first keystroke. */
+.wheel-input {
+  min-height: 34px;
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  line-height: 34px;
+}
+
+.wheel-input.is-empty::after {
+  content: '·····';
+  color: var(--text-faint);
+  letter-spacing: 0.2em;
+}
+
+.wheel-ring {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.wheel-hub {
+  display: flex;
+  justify-content: center;
+}
+
+.wheel-key {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--key-bg);
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+}
+
+.wheel-key:active {
+  background: var(--key-active);
+  transform: translateY(1px);
+}
+
+/* The compulsory letter, sitting on its own below the ring. */
+.wheel-key.is-centre {
+  background: var(--accent);
+  color: var(--accent-ink);
+  width: 54px;
+  height: 54px;
+  font-size: 24px;
+}
+
+/* Chips rather than a column: the list is the reward in this game and it has to
+   stay readable at forty words without pushing the wheel off screen. */
+.wheel-found {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  max-width: 360px;
+}
+
+.wheel-found li {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+/* Used every letter on the wheel. The best thing you can do here. */
+.wheel-found li.is-pangram {
+  background: var(--locked);
+  border-color: transparent;
+  color: var(--bg);
+}
+
+/* --- Word Search board ---------------------------------------------------- */
+
+.search-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--search-size), 1fr);
+  gap: 2px;
+  width: min(100%, 380px);
+  aspect-ratio: 1;
+}
+
+.search-cell {
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: var(--search-font);
+  font-weight: 650;
+  line-height: 1;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+/* The first tap of a pair. Deliberately loud -- if you forget you have one
+   armed, the next tap does something you did not expect. */
+.search-cell.is-anchor {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.search-cell.is-found {
+  background: color-mix(in srgb, var(--locked) 30%, transparent);
+  color: var(--locked);
+}
+
+.search-cell.is-found.is-anchor {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  max-width: 380px;
+}
+
+.search-list li {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+
+.search-list li.is-found {
+  color: var(--locked);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--locked) 18%, transparent);
+  text-decoration: line-through;
+}
+
 /* A single-row keyboard (the vowel pad) would otherwise stretch each key to a
    fifth of the screen. */
 .keyboard-wide .krow {
@@ -1094,10 +1269,15 @@ svg {
    while `place-items: center` pushed the overflow out of both sides at once.
    Real phone keyboards set their word keys in visibly smaller type; this does
    the same, and refuses to shrink below the label. */
-.key-word {
+/* Higher specificity than `.key` so the letter size cannot win by source order.
+   The capitals live here too, alongside the size that makes them fit: split
+   across a script and a stylesheet, one can arrive without the other and the
+   label ends up wider than it started. */
+.key.key-word {
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
   padding: 0 4px;
   white-space: nowrap;
   min-width: fit-content;

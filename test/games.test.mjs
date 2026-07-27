@@ -8,11 +8,13 @@ import { cryptogram } from '../src/games/cryptogram.js';
 import { vowels, stripVowels, vowelSlots, VOWELS } from '../src/games/vowels.js';
 import { fiver } from '../src/games/fiver.js';
 import { ladder } from '../src/games/ladder.js';
-import { LADDER_COMMON, LADDER_WORDS } from '../src/words.js';
+import { search } from '../src/games/search.js';
+import { wheel, solutionsFor, targetFor } from '../src/games/wheel.js';
+import { LADDER_COMMON, LADDER_WORDS, WORDS } from '../src/words.js';
 import { QUOTES } from '../src/quotes.js';
 import { distinctLetters } from '../src/cipher.js';
 
-const GAMES = [cryptogram, fiver, vowels, ladder];
+const GAMES = [cryptogram, fiver, vowels, ladder, wheel, search];
 
 // --- the shared contract ----------------------------------------------------
 
@@ -29,7 +31,11 @@ test('every game satisfies the module contract', () => {
       assert.ok(mod[key] !== undefined, `${mod.id} is missing ${key}`);
     }
     assert.ok(Array.isArray(mod.tools), `${mod.id}.tools`);
-    assert.ok(Array.isArray(mod.keyboard.rows), `${mod.id}.keyboard.rows`);
+    // keyboard is either a layout or explicitly null (Word Search plays on the board).
+    assert.ok(
+      mod.keyboard === null || Array.isArray(mod.keyboard.rows),
+      `${mod.id}.keyboard`
+    );
     // difficulties is either a map of levels or explicitly null.
     assert.ok(
       mod.difficulties === null || typeof mod.difficulties === 'object',
@@ -515,4 +521,264 @@ test('a saved ladder restores the same climb', () => {
   assert.equal(restored.par, game.par);
   assert.deepEqual(restored.rungs, game.rungs);
   assert.equal(restored.current, 'ab');
+});
+
+// --- Word Wheel -------------------------------------------------------------
+
+const WHEEL = (difficulty = 'medium', dateKey = '2026-08-01') =>
+  wheel.createGame({ mode: 'daily', difficulty, dateKey });
+
+test('every wheel contains a word using all of its letters', () => {
+  // Wheels are built backwards from a source word precisely so this holds. A
+  // wheel with no pangram has no best answer, only a longest accident.
+  for (const [difficulty, size] of [['easy', 7], ['medium', 8], ['hard', 9]]) {
+    for (let d = 1; d <= 6; d++) {
+      const game = WHEEL(difficulty, `2026-08-0${d}`);
+      assert.equal(game.letters.length, size, `${difficulty}: wrong wheel size`);
+      assert.ok(
+        game.solutions.some((w) => w.length === size),
+        `${difficulty} ${d}: no pangram on ${game.letters}`
+      );
+      assert.ok(game.solutions.length >= 12, `${difficulty} ${d}: only ${game.solutions.length} words`);
+    }
+  }
+});
+
+test('every wheel solution is legal by the wheel own rules', () => {
+  const game = WHEEL('hard');
+  const available = {};
+  for (const ch of game.letters) available[ch] = (available[ch] ?? 0) + 1;
+
+  for (const word of game.solutions) {
+    assert.ok(word.length >= 4, `${word} is too short`);
+    assert.ok(word.includes(game.centre), `${word} omits the centre letter`);
+    const used = {};
+    for (const ch of word) used[ch] = (used[ch] ?? 0) + 1;
+    for (const [ch, n] of Object.entries(used)) {
+      assert.ok(n <= (available[ch] ?? 0), `${word} uses ${n} x ${ch}, wheel has ${available[ch] ?? 0}`);
+    }
+  }
+});
+
+test('Word Wheel refuses short words, words missing the centre, and repeats', () => {
+  const game = WHEEL();
+  const good = game.solutions[game.solutions.length - 1];
+
+  game.current = 'ab';
+  assert.match(wheel.commit(game).toast, /At least 4 letters/);
+
+  // A real word made of wheel letters but without the compulsory one.
+  const without = [...game.letters].filter((c) => c !== game.centre).join('');
+  game.current = without.slice(0, 4);
+  assert.match(wheel.commit(game).toast, /needs|not in/i);
+
+  game.current = good;
+  assert.deepEqual(wheel.commit(game).toast, '');
+  assert.ok(game.found.includes(good));
+
+  game.current = good;
+  assert.match(wheel.commit(game).toast, /already on your list/);
+  assert.equal(game.found.filter((w) => w === good).length, 1);
+});
+
+test('Word Wheel tells a non-word from a word not in these letters', () => {
+  const game = WHEEL();
+  game.current = 'zzzz';
+  assert.match(wheel.commit(game).toast, /not in the word list/);
+
+  // A real word that the wheel cannot build.
+  const impossible = [...WORDS].find(
+    (w) => w.length === 5 && w.includes(game.centre) && ![...w].every((c) => game.letters.includes(c))
+  );
+  game.current = impossible;
+  assert.match(wheel.commit(game).toast, /not in these letters/);
+});
+
+test('the target is reachable and always leaves something over', () => {
+  assert.equal(targetFor(4), 4, 'a tiny wheel still needs four');
+  assert.equal(targetFor(100), 30);
+  for (const total of [12, 20, 40, 80]) {
+    assert.ok(targetFor(total) <= total, `${total}: target exceeds what exists`);
+    assert.ok(targetFor(total) >= 4, `${total}: target too small to be a game`);
+  }
+});
+
+test('Word Wheel counts as solved at the target but stays playable', () => {
+  const game = WHEEL();
+  while (game.found.length < game.target) wheel.hint(game);
+  assert.equal(wheel.isSolved(game), true);
+  assert.equal(wheel.isLost(game), false);
+
+  // The point of this game: reaching the target does not close the board.
+  const before = game.found.length;
+  const spare = game.solutions.find((w) => !game.found.includes(w));
+  game.current = spare;
+  wheel.commit(game);
+  assert.equal(game.found.length, before + 1, 'should still accept words after solving');
+});
+
+test('a tampered wheel save cannot credit words the wheel cannot make', () => {
+  const game = WHEEL();
+  const snapshot = wheel.toSnapshot(game);
+  snapshot.found = ['zzzz', game.solutions[0]];
+  const restored = wheel.hydrate(snapshot);
+  assert.deepEqual(restored.found, [game.solutions[0]]);
+});
+
+test('Word Wheel home card counts words found', () => {
+  assert.equal(wheel.statusFor(null, { difficultyLabel: '8 letters' }).state, 'new');
+
+  const game = WHEEL();
+  assert.equal(wheel.statusFor(wheel.toSnapshot(game), { difficultyLabel: '8 letters' }).state, 'new');
+
+  wheel.hint(game);
+  const progress = wheel.statusFor(wheel.toSnapshot(game), { difficultyLabel: '8 letters' });
+  assert.equal(progress.state, 'progress');
+  assert.match(progress.text, /1 word\b/);
+});
+
+// --- Word Search ------------------------------------------------------------
+
+const SEARCH = (difficulty = 'medium', dateKey = '2026-08-01') =>
+  search.createGame({ mode: 'daily', difficulty, dateKey });
+
+test('every hidden word is really in the grid, spelled along its own cells', () => {
+  // The one property that matters: a word on the list that is not in the grid is
+  // an unwinnable puzzle, and nothing else in the game would notice.
+  for (const [difficulty, size, count] of [['easy', 8, 6], ['medium', 10, 8], ['hard', 12, 10]]) {
+    for (let d = 1; d <= 8; d++) {
+      const game = SEARCH(difficulty, `2026-08-0${d}`);
+      assert.equal(game.size, size);
+      assert.equal(game.letters.length, size * size, 'grid is not square');
+      assert.equal(game.placed.length, count, `${difficulty} ${d}: only ${game.placed.length} words fitted`);
+
+      for (const entry of game.placed) {
+        assert.equal(entry.cells.length, entry.word.length, `${entry.word}: wrong cell count`);
+        const spelled = entry.cells.map((c) => game.letters[c]).join('');
+        assert.equal(spelled, entry.word, `${entry.word} is not at its own cells`);
+
+        // Cells must form a straight line with an even step.
+        const dx = (entry.cells[1] % size) - (entry.cells[0] % size);
+        const dy = Math.floor(entry.cells[1] / size) - Math.floor(entry.cells[0] / size);
+        entry.cells.forEach((cell, i) => {
+          assert.equal(cell % size, (entry.cells[0] % size) + dx * i, `${entry.word}: bent line`);
+          assert.equal(Math.floor(cell / size), Math.floor(entry.cells[0] / size) + dy * i);
+        });
+      }
+    }
+  }
+});
+
+test('every cell of the grid gets a letter', () => {
+  const game = SEARCH('hard');
+  assert.equal(game.letters.filter((ch) => /^[a-z]$/.test(ch)).length, game.size * game.size);
+});
+
+test('easy grids never run a word backwards', () => {
+  for (let d = 1; d <= 8; d++) {
+    const game = SEARCH('easy', `2026-08-0${d}`);
+    for (const entry of game.placed) {
+      const step = entry.cells[1] - entry.cells[0];
+      assert.ok(step > 0, `${entry.word} runs backwards on easy`);
+    }
+  }
+});
+
+test('tapping the two ends of a word finds it, and nothing else does', () => {
+  const game = SEARCH();
+  const entry = game.placed[0];
+  const first = entry.cells[0];
+  const last = entry.cells[entry.cells.length - 1];
+
+  // A wrong second tap finds nothing and clears the anchor.
+  search.onSelect(game, first);
+  assert.equal(game.anchor, first);
+  search.onSelect(game, (last + 1) % game.letters.length);
+  assert.equal(game.found.length, 0);
+  assert.equal(game.anchor, null);
+
+  // The right pair finds it, in either order.
+  search.onSelect(game, last);
+  const result = search.onSelect(game, first);
+  assert.equal(result.toast, entry.word.toUpperCase());
+  assert.deepEqual(game.found, [entry.word]);
+
+  // Tapping the same cell twice just clears the anchor.
+  search.onSelect(game, first);
+  search.onSelect(game, first);
+  assert.equal(game.anchor, null);
+});
+
+test('Word Search is solved only when every word is found', () => {
+  const game = SEARCH('easy');
+  assert.equal(search.isSolved(game), false);
+
+  for (const entry of game.placed.slice(0, -1)) {
+    search.onSelect(game, entry.cells[0]);
+    search.onSelect(game, entry.cells[entry.cells.length - 1]);
+  }
+  assert.equal(search.isSolved(game), false, 'one still hiding');
+
+  const last = game.placed[game.placed.length - 1];
+  search.onSelect(game, last.cells[0]);
+  search.onSelect(game, last.cells[last.cells.length - 1]);
+  assert.equal(search.isSolved(game), true);
+  assert.equal(search.isLost(game), false);
+});
+
+test('Word Search has no keyboard and ignores typing', () => {
+  assert.equal(search.keyboard, null);
+  const game = SEARCH();
+  assert.deepEqual(search.onKey(game, 'A'), {});
+  assert.equal(game.found.length, 0);
+});
+
+test('a grid never spells something offensive by accident', () => {
+  // Random filler read in eight directions is a lot of accidental words.
+  const blocked = ['fuck', 'shit', 'cunt', 'nigger', 'whore', 'bitch', 'rape', 'faggot'];
+  for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (let d = 1; d <= 6; d++) {
+      const game = SEARCH(difficulty, `2026-10-0${d}`);
+      const size = game.size;
+      const lines = [];
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1], [-1, 0], [0, -1], [-1, -1], [-1, 1]]) {
+            let run = '';
+            for (let i = 0; i < size; i++) {
+              const cx = x + dx * i;
+              const cy = y + dy * i;
+              if (cx < 0 || cy < 0 || cx >= size || cy >= size) break;
+              run += game.letters[cy * size + cx];
+            }
+            lines.push(run);
+          }
+        }
+      }
+      for (const word of blocked) {
+        assert.ok(!lines.some((l) => l.includes(word)), `${difficulty} ${d}: grid contains ${word}`);
+      }
+    }
+  }
+});
+
+test('Word Search home card counts words found', () => {
+  assert.equal(search.statusFor(null, { difficultyLabel: 'Medium' }).state, 'new');
+
+  const game = SEARCH();
+  assert.equal(search.statusFor(search.toSnapshot(game), { difficultyLabel: 'Medium' }).state, 'new');
+
+  search.hint(game);
+  const progress = search.statusFor(search.toSnapshot(game), { difficultyLabel: 'Medium' });
+  assert.equal(progress.state, 'progress');
+  assert.match(progress.text, /1 of 8 found/);
+});
+
+test('a saved Word Search restores the same grid and the same finds', () => {
+  const game = SEARCH();
+  search.hint(game);
+  const restored = search.hydrate(search.toSnapshot(game));
+  assert.deepEqual(restored.letters, game.letters);
+  assert.deepEqual(restored.found, game.found);
+  assert.deepEqual(restored.placed.map((p) => p.word), game.placed.map((p) => p.word));
 });

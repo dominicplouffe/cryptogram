@@ -152,7 +152,12 @@ export function buildKeyboard(container, layout = {}) {
     // ENTER sits left of the last row so DEL keeps its familiar right-hand spot.
     // Spelled out rather than an arrow: the return glyph reads as "new line",
     // which is not what this key does.
-    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'ENTER' });
+    //
+    // Written in mixed case even though it renders uppercase. The capitals come
+    // from .key-word, which also shrinks the type to fit them. Capitalising here
+    // instead would widen the label from a file that can arrive without the rule
+    // that makes it fit, which is worse than doing nothing at all.
+    if (isLast && wantsEnter) addKey(row, 'ENTER', { wide: true, label: 'Enter' });
     for (const letter of letters) addKey(row, letter);
     if (isLast && wantsDelete) {
       addKey(row, 'DEL', { wide: true, label: 'Delete', icon: DELETE_ICON });
