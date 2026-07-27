@@ -14,6 +14,14 @@ backend.
   because the "one letter apart" graph is far denser there, which is what makes
   ladders exist at all. Par is the shortest route through familiar words, and
   there is no way to lose.
+- **Word Wheel** — seven to nine letters, one of them compulsory, find as many
+  words as you can. The only game here that is not a single right answer: reaching
+  the target counts as solved, and the board stays open afterwards so you can keep
+  hunting. Every wheel is built backwards from a word using all its letters, so
+  there is always a best find.
+- **Word Search** — the hidden words are in there somewhere, in a straight line,
+  in any direction. Tap the first letter then the last. The only game with no
+  keyboard, and the only one that asks nothing of you but scanning.
 
 ## Play locally
 
@@ -30,11 +38,16 @@ because ES modules require HTTP.
 npm test           # node --test, no dependencies
 ```
 
-129 tests over the cipher engine, storage and migration, the shared game
-contract, each game's rules — including the duplicate-letter cases that make
-Fiver's scoring easy to get wrong, and proof that every generated ladder is
-solvable in exactly par — and the two lists that have to stay in step with the
+146 tests over the cipher engine, storage and migration, the shared game
+contract, each game's rules, and the two lists that have to stay in step with the
 registry (the offline precache and the shell's element ids).
+
+The ones worth knowing about are the generator proofs, because a bad puzzle is
+invisible until someone cannot solve it: every ladder is walked with the game's
+own hint and has to land in exactly par; every Word Search word has to actually
+be in its grid, spelled along its own cells in a straight line; every wheel has
+to contain a word using all of its letters; and no grid may spell anything
+offensive in any of eight directions.
 
 ## Home screen
 
@@ -70,7 +83,8 @@ Details that matter:
   controls. A game you have never opened shows that sheet before the board, from
   either section, so its rules arrive before its first puzzle.
 - **Category filter chips** appear once the library passes `FILTER_THRESHOLD`
-  games (six), and filter the Games list only.
+  games (six), and filter the Games list only. Six games is where we are, so they
+  are on.
 - The sheets carry a **sticky close button**. At `92dvh` tall there is almost no
   backdrop left to tap, so without it the only way out of a long sheet is to
   scroll to the end of the rules.
@@ -108,7 +122,7 @@ tools/make-words.mjs    regenerates src/words.js
 ## Adding a game
 
 1. Write a module in `src/games/` satisfying the same contract as the existing
-   four — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
+   six — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
    `isSolved`, `statusFor`, and so on. Alongside the rules it declares its own
    presentation: `name`, `blurb`, `icon`, a `category` for the filter chips, and
    `howTo`, the lines of plain prose its sheet shows.
@@ -129,6 +143,10 @@ Three rules worth knowing:
   that has just finished from one that was already finished when opened.
 - **`howTo` is prose, not markup.** It is rendered with `textContent`, and a test
   rejects angle brackets.
+- **A game may declare `keyboard: null`** and play entirely on the board, as Word
+  Search does. The shell then hides the key row and hands its height back. If a
+  tap on the board can *finish* the puzzle, `onSelect` must return a move result;
+  return nothing and the shell only repaints, so the win never fires.
 
 ## Adding your own quotes
 
@@ -148,17 +166,28 @@ on localhost logs a console warning for anything that breaks those rules.
 (`wamerican` and `cracklib-runtime` on Debian/Ubuntu). The output is committed, so
 the app never depends on those files being installed.
 
-It produces four lists, two per game, and the same split is behind both: a common
-pool for what the game **shows** you, and a wider pool for what it **accepts**.
-Drawing puzzles from the full list gives miserable ones like `CALKS`; accepting
-only common words makes the game feel broken when a real word is rejected.
+The same split is behind every game: a common pool for what a game **shows** you,
+and a wider pool for what it **accepts**. Drawing puzzles from the full list gives
+miserable ones like `CALKS`; accepting only common words makes a game feel broken
+when a real word is rejected.
 
-| | shown | accepted |
+`WORDS` is the one wide pool — every four-to-nine letter word. Fiver's `GUESSES`
+and Word Ladder's `LADDER_WORDS` are sliced out of it by length at load rather
+than shipped again, so no word is stored twice.
+
+| shown pool | | drawn from |
 |---|---|---|
-| Fiver, five letters | `ANSWERS` 2,258 | `GUESSES` 4,640 |
-| Word Ladder, four letters | `LADDER_COMMON` 1,439 | `LADDER_WORDS` 2,413 |
+| `ANSWERS` 2,257 | five letters | Fiver's puzzles |
+| `LADDER_COMMON` 1,439 | four letters | ladder endpoints and path graph |
+| `WHEEL_SOURCES` 3,600 | seven to nine | the word a wheel is built from |
+| `SEARCH_WORDS` 1,800 | four to eight | what gets hidden in a grid |
 
-Two filters run over all four:
+`words.js` is 443KB raw, 150KB gzipped, and is by far the largest thing the app
+ships. Word Wheel is what needs the wide pool: in a find-as-many-as-you-can game
+you type rejected words constantly, so a narrow list would feel broken several
+times a minute.
+
+Three filters run over the lot:
 
 - **Vulgarity and slurs.** The inputs are a spellchecker corpus and a password
   cracker's corpus, so both carry the lot — Fiver's answer pool shipped with
@@ -171,6 +200,11 @@ Two filters run over all four:
   contains `LOGE`, `SLOE`, `LASE` and `WALE`, plus `BLVD`, `IBID` and `VIII`.
   There is no frequency list to do better with, so this is curated by hand and
   grows as bad ones surface in play.
+- **A short "accept but never show" list.** `SEXUAL`, `EROTIC`, `KINKY` and a few
+  others are ordinary English that the games will happily take if you type them,
+  but will not put on a board. Deliberately short: `BREAST`, `THIGH`, `GROIN`,
+  `DRUNK` and `OPIUM` are all ordinary words crosswords use without comment, and
+  filtering those would be prudishness rather than judgement.
 
 The lists derive from SCOWL, whose licence permits redistribution provided its
 copyright notice travels along — it is reproduced at the top of `src/words.js`.

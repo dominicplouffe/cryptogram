@@ -264,6 +264,7 @@ export const wheel = {
 
     const outer = [...game.letters];
     outer.splice(outer.indexOf(game.centre), 1);
+    ring.style.setProperty('--wheel-cols', String(Math.ceil(outer.length / 2)));
 
     const addKey = (ch, index, className) => {
       const tile = document.createElement('button');

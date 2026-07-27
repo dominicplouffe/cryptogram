@@ -583,7 +583,9 @@ test('Word Wheel refuses short words, words missing the centre, and repeats', ()
 
 test('Word Wheel tells a non-word from a word not in these letters', () => {
   const game = WHEEL();
-  game.current = 'zzzz';
+  // Has to include the centre letter, or the compulsory-letter check fires
+  // first -- which is the right order for the player, less so for this test.
+  game.current = `zz${game.centre}z`;
   assert.match(wheel.commit(game).toast, /not in the word list/);
 
   // A real word that the wheel cannot build.
@@ -678,8 +680,12 @@ test('easy grids never run a word backwards', () => {
   for (let d = 1; d <= 8; d++) {
     const game = SEARCH('easy', `2026-08-0${d}`);
     for (const entry of game.placed) {
-      const step = entry.cells[1] - entry.cells[0];
-      assert.ok(step > 0, `${entry.word} runs backwards on easy`);
+      // "Backwards" is about reading direction, not array order: the up-right
+      // diagonal reads left to right while stepping negatively through cells.
+      const size = game.size;
+      const dx = (entry.cells[1] % size) - (entry.cells[0] % size);
+      const dy = Math.floor(entry.cells[1] / size) - Math.floor(entry.cells[0] / size);
+      assert.ok(dx > 0 || (dx === 0 && dy > 0), `${entry.word} runs backwards on easy`);
     }
   }
 });

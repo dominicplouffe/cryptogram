@@ -100,6 +100,19 @@ const PROFANE_ALLOW = new Set([
   'spiced', 'spices', 'spicing', 'spicy', 'damn', 'damned', 'damning', 'damns',
 ]);
 
+// Ordinary vocabulary that is fine to ACCEPT but awkward to SHOW. The games
+// never put these on a board, and never refuse them either -- the same
+// shown-versus-accepted split as everywhere else, applied to tone rather than to
+// obscurity.
+//
+// Kept deliberately short. BREAST, THIGH, GROIN, DRUNK and OPIUM are all
+// ordinary English that crosswords use without comment, and filtering them would
+// be prudishness rather than judgement.
+const NOT_SHOWN = new Set([
+  'sexual', 'sexy', 'erotic', 'lust', 'lusty', 'nude', 'fetish', 'kinky',
+  'thong', 'bosom',
+]);
+
 const PROFANE = (() => {
   const out = new Set(PROFANE_EXTRA);
   const suffixes = ['', 's', 'es', 'ed', 'd', 'ing', 'er', 'ers', 'y', 'ies', 'ish'];
@@ -186,6 +199,7 @@ const answers = [...guesses]
   // letter word ending in S is nearly always the plural of a four letter one.
   .filter((w) => !/(s|ed)$/.test(w))
   .filter((w) => !BLOCKLIST.has(w))
+  .filter((w) => !NOT_SHOWN.has(w))
   .sort();
 
 const sortedGuesses = [...guesses].sort();
@@ -207,6 +221,7 @@ const ladderCommon = [...ladderWords]
   .filter((w) => ladderCommonSet.has(w))
   .filter((w) => !/s$/.test(w))
   .filter((w) => !LADDER_BLOCKLIST.has(w))
+  .filter((w) => !NOT_SHOWN.has(w))
   .sort();
 
 const sortedLadderWords = [...ladderWords].sort();
@@ -251,7 +266,8 @@ const wheelSources = WHEEL_LENGTHS.flatMap((n) =>
       .filter((w) => w.length === n)
       .filter((w) => commonAll.has(w))
       // A source with too few distinct letters makes a wheel with nothing on it.
-      .filter((w) => new Set(w).size >= n - 2),
+      .filter((w) => new Set(w).size >= n - 2)
+      .filter((w) => !NOT_SHOWN.has(w)),
     SOURCES_PER_LENGTH
   )
 ).sort();
@@ -267,7 +283,9 @@ const searchWords = spread(
       .filter((w) => w.length >= 6 && w.length <= 8)
       .filter((w) => commonAll.has(w))
       .filter((w) => !/(s|ed)$/.test(w)),
-  ].sort(),
+  ]
+    .filter((w) => !NOT_SHOWN.has(w))
+    .sort(),
   SEARCH_CAP
 );
 

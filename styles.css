@@ -998,12 +998,14 @@ svg {
   letter-spacing: 0.2em;
 }
 
+/* A grid rather than a wrapping flex row: seven or eight letters wrapping freely
+   leaves one stranded on its own line. Columns are set to half the count so it
+   always breaks into two even rows. */
 .wheel-ring {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(var(--wheel-cols), auto);
   justify-content: center;
   gap: 8px;
-  max-width: 320px;
 }
 
 .wheel-hub {
