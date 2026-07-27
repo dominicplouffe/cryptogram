@@ -10,11 +10,13 @@ import { fiver } from '../src/games/fiver.js';
 import { ladder } from '../src/games/ladder.js';
 import { search } from '../src/games/search.js';
 import { wheel, solutionsFor, targetFor } from '../src/games/wheel.js';
+import { boxed, BOX_LETTERS, MIN_WORD as BOX_MIN, rejectionFor } from '../src/games/boxed.js';
+import { hidden, lettersIn, livesFor } from '../src/games/hidden.js';
 import { LADDER_COMMON, LADDER_WORDS, WORDS } from '../src/words.js';
 import { QUOTES } from '../src/quotes.js';
 import { distinctLetters } from '../src/cipher.js';
 
-const GAMES = [cryptogram, fiver, vowels, ladder, wheel, search];
+const GAMES = [cryptogram, fiver, vowels, hidden, ladder, wheel, boxed, search];
 
 // --- the shared contract ----------------------------------------------------
 
@@ -800,4 +802,354 @@ test('a saved Word Search restores the same grid and the same finds', () => {
   assert.deepEqual(restored.letters, game.letters);
   assert.deepEqual(restored.found, game.found);
   assert.deepEqual(restored.placed.map((p) => p.word), game.placed.map((p) => p.word));
+});
+
+// --- Boxed ------------------------------------------------------------------
+
+const BOXED = (difficulty = 'medium', dateKey = '2026-08-01') =>
+  boxed.createGame({ mode: 'daily', difficulty, dateKey });
+
+test('every Boxed board deals twelve distinct letters onto four sides of three', () => {
+  for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (let d = 1; d <= 8; d++) {
+      const game = BOXED(difficulty, `2026-08-0${d}`);
+      const label = `${difficulty} ${d}`;
+
+      assert.equal(game.sides.length, 4, `${label}: side count`);
+      for (const side of game.sides) assert.equal(side.length, 3, `${label}: side "${side}"`);
+      assert.equal(game.letters.length, BOX_LETTERS, `${label}: letter count`);
+      assert.equal(new Set(game.letters).size, BOX_LETTERS, `${label}: letters repeat`);
+      assert.match(game.letters, /^[a-z]+$/, `${label}: letters are not plain lowercase`);
+    }
+  }
+});
+
+test('every Boxed board has a two-word solution its own rules accept', () => {
+  // The whole game rests on this. A box dealt from random letters is usually
+  // unsolvable and there is no way to tell by looking, so the generator works
+  // backwards from a pair of real words and this proves the pair survives.
+  for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (let d = 1; d <= 8; d++) {
+      const game = BOXED(difficulty, `2026-08-0${d}`);
+      const [first, second] = game.sources;
+      const label = `${difficulty} ${d} (${first}, ${second})`;
+
+      assert.equal(
+        rejectionFor(first, { sides: game.sides, words: [] }),
+        null,
+        `${label}: first word rejected`
+      );
+      assert.equal(
+        rejectionFor(second, { sides: game.sides, words: [first] }),
+        null,
+        `${label}: second word rejected`
+      );
+      assert.equal(
+        new Set(first + second).size,
+        BOX_LETTERS,
+        `${label}: the pair does not cover the box`
+      );
+      // Two words is always within the limit, so every board is winnable at every
+      // difficulty rather than only at the generous ones.
+      assert.ok(game.limit >= 2, `${label}: limit below par`);
+    }
+  }
+});
+
+test('Boxed refuses two letters from the same side', () => {
+  const game = BOXED();
+  const [side] = game.sides;
+  // Both letters are on the box and the word may well be real; it is the side
+  // rule alone that has to reject it.
+  const reason = rejectionFor(side[0] + side[1] + side[0] + side[1], game);
+  assert.match(reason, /same side/);
+});
+
+test('Boxed refuses a letter that is not on the box at all', () => {
+  const game = BOXED();
+  const absent = 'abcdefghijklmnopqrstuvwxyz'.split('').find((ch) => !game.letters.includes(ch));
+  assert.match(rejectionFor(absent.repeat(4), game), /not on the box/);
+});
+
+test('Boxed requires each word to start where the last one ended', () => {
+  const game = BOXED();
+  const [first, second] = game.sources;
+  game.current = first;
+  boxed.commit(game);
+
+  // The real second word is fine; anything starting elsewhere is not.
+  assert.equal(rejectionFor(second, game), null);
+
+  // The substituted letter has to be wrong ONLY about the junction. The side rule
+  // is checked first, so a letter that happens to share a side with second[1]
+  // reports that instead and the assertion below passes or fails depending on how
+  // the box was dealt -- which is how the first version of this test broke as soon
+  // as the word pools changed under it.
+  const sideOf = (ch) => game.sides.findIndex((side) => side.includes(ch));
+  const junction = first[first.length - 1];
+  const wrongStart = [...game.letters].find(
+    (ch) => ch !== junction && sideOf(ch) !== sideOf(second[1])
+  );
+  assert.ok(wrongStart, 'no letter available to test the junction rule with');
+  assert.match(rejectionFor(wrongStart + second.slice(1), game), /Must start with/);
+});
+
+test('Boxed enforces its minimum word length', () => {
+  const game = BOXED();
+  assert.match(rejectionFor(game.letters.slice(0, BOX_MIN - 1), game), /At least/);
+});
+
+test('Boxed is won by covering all twelve letters, not by using every word', () => {
+  const game = BOXED();
+  const [first, second] = game.sources;
+
+  game.current = first;
+  boxed.commit(game);
+  assert.equal(boxed.isSolved(game), false, 'one word should not finish it');
+
+  game.current = second;
+  boxed.commit(game);
+  assert.equal(boxed.isSolved(game), true);
+  assert.equal(boxed.isLost(game), false);
+  assert.equal(game.words.length, 2);
+  assert.ok(game.words.length < game.limit, 'solved with words to spare');
+});
+
+test('Boxed is lost once the word limit is spent without covering the box', () => {
+  // The rule on its own, without hunting for a chain of stingy words: a board
+  // with the limit used up and letters still missing is lost.
+  assert.equal(
+    boxed.isLost({ words: ['aaaa', 'bbbb', 'cccc', 'dddd'], covered: new Set('abc'), limit: 4 }),
+    true
+  );
+  assert.equal(
+    boxed.isLost({ words: ['aaaa'], covered: new Set('abc'), limit: 4 }),
+    false,
+    'words still in hand'
+  );
+  // A board finished on the very last word is won, not lost.
+  assert.equal(
+    boxed.isLost({
+      words: ['a', 'b', 'c', 'd'],
+      covered: new Set('abcdefghijkl'),
+      limit: 4,
+    }),
+    false
+  );
+});
+
+test('Boxed rejects a word the same box already accepted once', () => {
+  const game = BOXED();
+  const [first] = game.sources;
+
+  // The junction rule is checked before this one, on purpose: "must start with E"
+  // is more use than "already played" when both are true. So reaching the
+  // duplicate rule at all needs a chain whose last word hands back the letter
+  // this word starts with -- rejectionFor reads `words` only for those two rules,
+  // so the bridging word does not have to be playable itself.
+  const bridge = `zz${first[0]}`;
+  assert.match(
+    rejectionFor(first, { sides: game.sides, words: [first, bridge] }),
+    /already played/
+  );
+});
+
+test('a tampered Boxed save keeps only the words the box allows, in order', () => {
+  const game = BOXED();
+  const [first, second] = game.sources;
+  const snapshot = { ...boxed.toSnapshot(game), words: ['zzzz', first, 'qqqq', second] };
+
+  const restored = boxed.hydrate(snapshot);
+  assert.deepEqual(restored.words, [first, second]);
+  assert.equal(restored.covered.size, BOX_LETTERS);
+});
+
+test('a Boxed hint plays a word the board would have accepted', () => {
+  const game = BOXED();
+  const before = game.words.length;
+  boxed.hint(game);
+
+  assert.equal(game.words.length, before + 1, 'hint played nothing');
+  assert.equal(game.hintsUsed, 1);
+  // Replaying the hinted word through the rules from scratch has to pass, which
+  // is what stops a hint from being the one move the player could not have made.
+  assert.equal(rejectionFor(game.words[0], { sides: game.sides, words: [] }), null);
+});
+
+test('Boxed regenerating the word list cannot rewrite a box in progress', () => {
+  // The sides are stored outright rather than as an index into a capped pool, so
+  // a saved board carries its own puzzle and never depends on words.js agreeing.
+  const snapshot = boxed.toSnapshot(BOXED());
+  assert.ok(Array.isArray(snapshot.sides), 'sides are not in the snapshot');
+  assert.equal(snapshot.sides.join('').length, BOX_LETTERS);
+  assert.deepEqual(boxed.hydrate(snapshot).sides, snapshot.sides);
+});
+
+test('Boxed home card reports letters covered rather than words played', () => {
+  assert.equal(boxed.statusFor(null, { difficultyLabel: '5 words' }).state, 'new');
+
+  const game = BOXED();
+  assert.equal(boxed.statusFor(boxed.toSnapshot(game), { difficultyLabel: '5 words' }).state, 'new');
+
+  game.current = game.sources[0];
+  boxed.commit(game);
+  const progress = boxed.statusFor(boxed.toSnapshot(game), { difficultyLabel: '5 words' });
+  assert.equal(progress.state, 'progress');
+  assert.match(progress.text, new RegExp(`of ${BOX_LETTERS} letters`));
+});
+
+// --- Hidden Quote -----------------------------------------------------------
+
+const HIDDEN = (difficulty = 'medium', dateKey = '2026-08-01') =>
+  hidden.createGame({ mode: 'daily', difficulty, dateKey });
+
+test('every quote in the pack makes a Hidden Quote board that can be lost', () => {
+  // The failure this guards against is silent: a quote using enough of the
+  // alphabet leaves fewer wrong letters in existence than the player has lives,
+  // so the pips can never all go out and the game quietly cannot be lost.
+  QUOTES.forEach((quote, index) => {
+    const absent = 26 - lettersIn(quote.text).size;
+    assert.ok(absent >= 2, `quote ${index} leaves only ${absent} wrong letters`);
+
+    for (const [difficulty, ceiling] of [['easy', 7], ['medium', 5], ['hard', 4]]) {
+      const lives = livesFor(absent, ceiling);
+      assert.ok(lives >= 1, `quote ${index} ${difficulty}: no lives`);
+      assert.ok(
+        lives <= absent - 1,
+        `quote ${index} ${difficulty}: ${lives} lives but only ${absent} wrong letters`
+      );
+    }
+  });
+});
+
+test('every Hidden Quote board arrives blank and unsolved', () => {
+  for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (let d = 1; d <= 8; d++) {
+      const game = HIDDEN(difficulty, `2026-08-0${d}`);
+      const label = `${difficulty} ${d}`;
+      assert.equal(game.called.length, 0, `${label}: arrived with calls`);
+      assert.equal(hidden.isSolved(game), false, `${label}: arrived solved`);
+      assert.equal(hidden.isLost(game), false, `${label}: arrived lost`);
+      assert.ok(game.present.size >= 5, `${label}: only ${game.present.size} letters to find`);
+      assert.ok(game.lives >= 1, `${label}: no lives`);
+    }
+  }
+});
+
+test('Hidden Quote runs its length bands backwards from Cryptogram', () => {
+  // Deliberate, and the reason is in the module: a long quote reveals eight
+  // copies of a letter at once and reads itself out to you, so length is easier
+  // here and harder there. If someone "fixes" this to match, it should fail.
+  const longest = HIDDEN('easy').plain.length;
+  const shortest = HIDDEN('hard').plain.length;
+  assert.ok(longest > shortest, `easy ${longest} should be longer than hard ${shortest}`);
+});
+
+test('a called letter reveals every copy of itself and costs nothing', () => {
+  const game = HIDDEN();
+  const letter = [...game.present][0];
+  hidden.onKey(game, letter);
+
+  assert.ok(game.called.includes(letter));
+  assert.equal(game.misses.length, 0);
+  assert.equal(hidden.isLost(game), false);
+});
+
+test('a letter that is not in the quote costs a life and is remembered', () => {
+  const game = HIDDEN();
+  const absent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find((ch) => !game.present.has(ch));
+
+  const result = hidden.onKey(game, absent);
+  assert.match(result.toast, new RegExp(`No ${absent}`));
+  assert.deepEqual(game.misses, [absent]);
+  assert.ok(game.called.includes(absent));
+});
+
+test('Hidden Quote never charges twice for the same letter', () => {
+  const game = HIDDEN();
+  const absent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find((ch) => !game.present.has(ch));
+
+  hidden.onKey(game, absent);
+  const again = hidden.onKey(game, absent);
+  assert.match(again.toast, /already been called/);
+  assert.equal(game.misses.length, 1, 'a repeat call spent a second life');
+});
+
+test('Hidden Quote is solved by calling every letter it contains', () => {
+  const game = HIDDEN();
+  for (const ch of game.present) hidden.onKey(game, ch);
+
+  assert.equal(hidden.isSolved(game), true);
+  assert.equal(hidden.isLost(game), false);
+  assert.equal(game.misses.length, 0);
+  assert.equal(hidden.outcomeContent(game).title, 'Not a single miss!');
+});
+
+test('Hidden Quote is lost when the pips run out, and gives up the quote', () => {
+  const game = HIDDEN();
+  const absent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter((ch) => !game.present.has(ch));
+
+  for (let i = 0; i < game.lives; i++) hidden.onKey(game, absent[i]);
+
+  assert.equal(hidden.isLost(game), true);
+  assert.equal(hidden.isSolved(game), false);
+  assert.equal(hidden.outcomeContent(game).title, 'Out of lives');
+  assert.equal(hidden.outcomeContent(game).body, game.original);
+});
+
+test('a lost Hidden Quote refuses further calls', () => {
+  const game = HIDDEN();
+  const absent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter((ch) => !game.present.has(ch));
+  for (let i = 0; i < game.lives; i++) hidden.onKey(game, absent[i]);
+
+  // The shell sets the flag it owns; the module has to respect it.
+  game.lost = true;
+  const before = game.called.length;
+  hidden.onKey(game, [...game.present][0]);
+  assert.equal(game.called.length, before, 'a lost board accepted another call');
+});
+
+test('a Hidden Quote hint reveals the most common letter still missing', () => {
+  const game = HIDDEN();
+  const countOf = (letter) => [...game.plain].filter((ch) => ch === letter).length;
+  const expected = [...game.present].reduce((a, b) => (countOf(a) >= countOf(b) ? a : b));
+
+  hidden.hint(game);
+  assert.deepEqual(game.hinted, [expected]);
+  assert.equal(game.hintsUsed, 1);
+  assert.equal(game.misses.length, 0, 'a hint spent a life');
+});
+
+test('a tampered Hidden Quote save cannot spend a life twice or reveal punctuation', () => {
+  const game = HIDDEN();
+  const snapshot = { ...hidden.toSnapshot(game), called: ['A', 'A', '.', '4', 'b'] };
+  const restored = hidden.hydrate(snapshot);
+
+  assert.deepEqual(restored.called, ['A', 'B']);
+  assert.equal(restored.misses.length, restored.called.filter((c) => !restored.present.has(c)).length);
+});
+
+test('Hidden Quote home card counts letters found', () => {
+  assert.equal(hidden.statusFor(null, { difficultyLabel: 'Medium' }).state, 'new');
+
+  const game = HIDDEN();
+  const snapshot = hidden.toSnapshot(game);
+  assert.equal(hidden.statusFor(snapshot, { difficultyLabel: 'Medium' }).state, 'new');
+
+  hidden.onKey(game, [...game.present][0]);
+  const progress = hidden.statusFor(hidden.toSnapshot(game), { difficultyLabel: 'Medium' });
+  assert.equal(progress.state, 'progress');
+  assert.match(progress.text, /1 of \d+ letters/);
+});
+
+test('a saved Hidden Quote restores the same quote and the same calls', () => {
+  const game = HIDDEN();
+  hidden.onKey(game, [...game.present][0]);
+  hidden.hint(game);
+
+  const restored = hidden.hydrate(hidden.toSnapshot(game));
+  assert.equal(restored.plain, game.plain);
+  assert.deepEqual(restored.called, game.called);
+  assert.deepEqual(restored.hinted, game.hinted);
+  assert.equal(restored.lives, game.lives);
 });

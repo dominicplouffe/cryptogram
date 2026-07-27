@@ -1158,6 +1158,198 @@ svg {
   text-decoration: line-through;
 }
 
+/* --- Boxed board ---------------------------------------------------------- */
+
+.boxed-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Three-by-three: the four rails around the edge and the word you are building
+   in the middle. The frame is the rule made visible -- two letters on the same
+   rail can never follow each other, and you can see that without being told. */
+.boxed-frame {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  width: min(100%, 330px);
+  aspect-ratio: 1;
+}
+
+.boxed-rail {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Vertical rails stack, horizontal ones run across. */
+.boxed-top {
+  grid-area: 1 / 2;
+}
+
+.boxed-bottom {
+  grid-area: 3 / 2;
+}
+
+.boxed-left {
+  grid-area: 2 / 1;
+  flex-direction: column;
+}
+
+.boxed-right {
+  grid-area: 2 / 3;
+  flex-direction: column;
+}
+
+.boxed-middle {
+  grid-area: 2 / 2;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}
+
+.boxed-tile {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--key-bg);
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+  transition: background-color 0.12s ease, opacity 0.12s ease;
+}
+
+.boxed-tile:active {
+  background: var(--key-active);
+  transform: translateY(1px);
+}
+
+/* A letter already used. The goal is to have all twelve wearing this. */
+.boxed-tile.is-used {
+  background: color-mix(in srgb, var(--locked) 30%, transparent);
+  color: var(--locked);
+}
+
+/* Cannot legally come next: same rail as the letter you just typed, or the wrong
+   junction letter to start a word. Dimmed rather than hidden, because the letter
+   still has to be readable while you plan two moves ahead. */
+.boxed-tile.is-blocked {
+  opacity: 0.32;
+}
+
+/* What you are typing. Holds its height when empty so the frame does not jump. */
+.boxed-input {
+  min-height: 30px;
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  line-height: 30px;
+  text-align: center;
+  padding: 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.boxed-input.is-empty::after {
+  content: '····';
+  color: var(--text-faint);
+  letter-spacing: 0.2em;
+}
+
+/* The chain, in play order: this game is a sequence and reading it backwards
+   would hide the junction letter you have to start from next. */
+.boxed-chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  max-width: 330px;
+}
+
+.boxed-chain li {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+/* Only between chips, so the row never opens with a stray arrow. */
+.boxed-chain li + li::before {
+  content: '→ ';
+  color: var(--text-faint);
+}
+
+/* --- Hidden Quote board --------------------------------------------------- */
+
+.hidden-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+/* One pip per life. A row of pips rather than "3 left" for the same reason the
+   home screen uses a dot meter: a number reads as a score, pips read as stock. */
+.hidden-lives {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  min-height: 16px;
+}
+
+.hidden-lives i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--error);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.hidden-lives i.is-spent {
+  background: transparent;
+  border: 1.5px solid var(--line);
+  transform: scale(0.82);
+}
+
+/* A letter the player called that was not in the quote. Shown so a wrong guess
+   leaves a trace -- otherwise the only record of a miss is a missing pip. */
+.hidden-misses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  min-height: 22px;
+}
+
+.hidden-misses span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+  text-decoration: line-through;
+}
+
 /* A single-row keyboard (the vowel pad) would otherwise stretch each key to a
    fifth of the screen. */
 .keyboard-wide .krow {

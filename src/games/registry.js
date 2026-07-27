@@ -5,14 +5,18 @@
 // the per-game sheet, the stats sheet, the "Today" meter and progress pruning
 // all derive from this list.
 
+import { boxed } from './boxed.js';
 import { cryptogram } from './cryptogram.js';
 import { fiver } from './fiver.js';
+import { hidden } from './hidden.js';
 import { ladder } from './ladder.js';
 import { search } from './search.js';
 import { vowels } from './vowels.js';
 import { wheel } from './wheel.js';
 
-export const GAMES = [cryptogram, fiver, vowels, ladder, wheel, search];
+// Grouped by category rather than by when they were written, so the filter chips
+// and the unfiltered list agree about what sits next to what.
+export const GAMES = [cryptogram, fiver, vowels, hidden, ladder, wheel, boxed, search];
 
 export const GAME_IDS = GAMES.map((g) => g.id);
 

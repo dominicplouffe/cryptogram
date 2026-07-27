@@ -9,6 +9,13 @@ backend.
   amber is in the word but elsewhere, grey is not in the word.
 - **Missing Vowels** — every A, E, I, O and U taken out of a quote. Put them back.
   Y is left alone.
+- **Hidden Quote** — the quote starts completely blank. Call a letter and every
+  copy of it appears at once; call one that is not in there and it costs a life.
+  The only quote game you can lose, and so the only one where being wrong has a
+  price rather than just costing time. Its length tiers run **backwards** from
+  Cryptogram: a long quote hands you eight copies of a letter at a stroke and then
+  more or less reads itself out, so length is the easy tier here and the short
+  quotes are the cruel ones.
 - **Word Ladder** — get from one four-letter word to another by changing a single
   letter at a time: COLD, CORD, CARD, WARD, WARM. Four letters and not five
   because the "one letter apart" graph is far denser there, which is what makes
@@ -19,6 +26,14 @@ backend.
   the target counts as solved, and the board stays open afterwards so you can keep
   hunting. Every wheel is built backwards from a word using all its letters, so
   there is always a best find.
+- **Boxed** — twelve letters, three to a side of a square. Chain words end to
+  start, using all twelve to win, and two letters in a row may never come from the
+  same side. The constraint is the whole difficulty: the letters are common and the
+  word list is wide, but the side rule rules out most of what you would otherwise
+  type. Every box is built backwards from a two-word solution, so one always
+  exists — almost nobody finds it. Words are at least four letters because that is
+  where `WORDS` starts, which makes it harder than the usual version of this
+  puzzle: three-letter words are exactly what you reach for at an awkward junction.
 - **Word Search** — the hidden words are in there somewhere, in a straight line,
   in any direction. Tap the first letter then the last. The only game with no
   keyboard, and the only one that asks nothing of you but scanning.
@@ -38,7 +53,7 @@ because ES modules require HTTP.
 npm test           # node --test, no dependencies
 ```
 
-146 tests over the cipher engine, storage and migration, the shared game
+172 tests over the cipher engine, storage and migration, the shared game
 contract, each game's rules, and the two lists that have to stay in step with the
 registry (the offline precache and the shell's element ids).
 
@@ -46,8 +61,14 @@ The ones worth knowing about are the generator proofs, because a bad puzzle is
 invisible until someone cannot solve it: every ladder is walked with the game's
 own hint and has to land in exactly par; every Word Search word has to actually
 be in its grid, spelled along its own cells in a straight line; every wheel has
-to contain a word using all of its letters; and no grid may spell anything
-offensive in any of eight directions.
+to contain a word using all of its letters; every Boxed board has its two-word
+solution replayed through the game's own rules, junction and side checks
+included; and no grid may spell anything offensive in any of eight directions.
+
+One more guards the kind of failure that is silent rather than wrong: every quote
+in the pack has to leave enough letters *out* of itself that Hidden Quote can
+still be lost — a quote using twenty-four letters of the alphabet would draw a row
+of pips that can never all go out.
 
 ## Home screen
 
@@ -83,8 +104,10 @@ Details that matter:
   controls. A game you have never opened shows that sheet before the board, from
   either section, so its rules arrive before its first puzzle.
 - **Category filter chips** appear once the library passes `FILTER_THRESHOLD`
-  games (six), and filter the Games list only. Six games is where we are, so they
-  are on.
+  games (six), and filter the Games list only. Eight games is where we are, so they
+  are on. `Quotes` and `Letters` hold three each; `Guessing` and `Grids` are still
+  one apiece, which is honest — a game is filed by what it is, not to balance the
+  row.
 - The sheets carry a **sticky close button**. At `92dvh` tall there is almost no
   backdrop left to tap, so without it the only way out of a long sheet is to
   scroll to the end of the rules.
@@ -110,7 +133,7 @@ src/main.js             the shell: views, timer, sheets, wiring
 src/store.js            namespaced storage, per-game stats, streaks, migration
 src/render.js           quote grid + configurable keyboard
 src/cipher.js           seeded RNG, derangements, substitution
-src/quotes.js           the quote pack (shared by Cryptogram and Missing Vowels)
+src/quotes.js           the quote pack (Cryptogram, Missing Vowels, Hidden Quote)
 src/words.js            GENERATED word lists for Fiver and Word Ladder
 src/games/registry.js   the list of games that drives everything
 src/games/*.js          one module per game
@@ -122,7 +145,7 @@ tools/make-words.mjs    regenerates src/words.js
 ## Adding a game
 
 1. Write a module in `src/games/` satisfying the same contract as the existing
-   six — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
+   eight — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
    `isSolved`, `statusFor`, and so on. Alongside the rules it declares its own
    presentation: `name`, `blurb`, `icon`, a `category` for the filter chips, and
    `howTo`, the lines of plain prose its sheet shows.
@@ -160,6 +183,19 @@ Keep it between 20 and 160 characters and ASCII-only — curly quotes, accents a
 em-dashes break cell alignment and have no key on the on-screen keyboard. Running
 on localhost logs a console warning for anything that breaks those rules.
 
+The pack is 805 quotes across 303 authors. Two conventions the validator does not
+enforce but the whole pack follows:
+
+- **No apostrophes**, and in fact nothing outside `.` `,` `:` `?`. There is no
+  apostrophe key on the on-screen keyboard, so prefer a quote that does not need
+  one — `do not` for `don't` is fine, but rewriting someone's sentence to dodge a
+  possessive is not. Pick a different quote instead.
+- **Append, never insert.** A snapshot stores an index into the whole pack, so
+  adding to the end keeps every saved game pointing at the quote it was playing.
+  This is the cheap counterpart to regenerating `words.js`: appending does move
+  which quote each *unplayed* daily will draw, because the pick is taken modulo a
+  length-filtered slice, but it cannot disturb a board someone is midway through.
+
 ## Word lists
 
 `node tools/make-words.mjs` regenerates `src/words.js` from the system dictionary
@@ -181,6 +217,13 @@ than shipped again, so no word is stored twice.
 | `LADDER_COMMON` 1,439 | four letters | ladder endpoints and path graph |
 | `WHEEL_SOURCES` 3,600 | seven to nine | the word a wheel is built from |
 | `SEARCH_WORDS` 1,800 | four to eight | what gets hidden in a grid |
+
+Boxed adds no pool of its own. It builds from `WHEEL_SOURCES` and `SEARCH_WORDS`
+together and checks typed words against `WORDS`, which is deliberate now that
+regenerating is known to be expensive — see below. There are about 124,000 word
+pairs in those two pools that cover exactly twelve distinct letters and admit a
+legal dealing onto four sides, so the supply was never the reason to ship more
+data.
 
 `words.js` is 443KB raw, 150KB gzipped, and is by far the largest thing the app
 ships. Word Wheel is what needs the wide pool: in a find-as-many-as-you-can game
@@ -205,6 +248,21 @@ Three filters run over the lot:
   but will not put on a board. Deliberately short: `BREAST`, `THIGH`, `GROIN`,
   `DRUNK` and `OPIUM` are all ordinary words crosswords use without comment, and
   filtering those would be prudishness rather than judgement.
+
+**Regenerating is not a free action.** `WHEEL_SOURCES` and `SEARCH_WORDS` are
+capped, and `spread()` thins to the cap by striding the filtered list, so removing
+a single word shifts every index after it and resamples the whole pool. Measured:
+taking two words out of one filter churned 42% of `WHEEL_SOURCES` and 65% of
+`SEARCH_WORDS`, which changed 30 of 30 Word Search dailies and 11 of 30 Word Wheel
+dailies over the dates checked.
+
+That matters because a snapshot stores an identifier, not the puzzle: Word Search
+rebuilds its grid from a seed plus the pool, and Word Wheel stores a `sourceIndex`
+into `WHEEL_SOURCES`. **So `words.js` is effectively part of the save format for
+those two games.** Both games discard found words a rebuilt board does not
+contain, so the failure is lost progress rather than a corrupt board — but a
+player mid-puzzle does silently get a different one. Regenerate deliberately, and
+expect the dailies to move.
 
 The lists derive from SCOWL, whose licence permits redistribution provided its
 copyright notice travels along — it is reproduced at the top of `src/words.js`.

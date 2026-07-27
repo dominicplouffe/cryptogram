@@ -9,7 +9,7 @@
 // of bug entirely. The cache is still a complete copy, so offline play is
 // unaffected.
 
-const CACHE_VERSION = 'plouffe-word-games-v10';
+const CACHE_VERSION = 'plouffe-word-games-v11';
 
 // Relative paths so the worker also works from a GitHub Pages subdirectory.
 const SHELL = [
@@ -24,8 +24,10 @@ const SHELL = [
   'src/render.js',
   'src/words.js',
   'src/games/registry.js',
+  'src/games/boxed.js',
   'src/games/cryptogram.js',
   'src/games/fiver.js',
+  'src/games/hidden.js',
   'src/games/ladder.js',
   'src/games/search.js',
   'src/games/wheel.js',
