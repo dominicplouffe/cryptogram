@@ -193,9 +193,9 @@ export const search = {
 
   howTo: [
     'Every word on the list is hidden somewhere in the grid, in a straight line.',
-    'Tap the first letter of a word, then tap its last letter. Get it right and it stays lit.',
+    'Tap the first letter of a word, then tap its LAST letter — not the ones in between.',
     'Words run in any direction, including diagonally, and on medium and hard they can run backwards.',
-    'Tap a lit word again if you want to clear your selection and start over.',
+    'Get it wrong and your start stays put, so you can just try a different end. Tap the start again to clear it.',
     'There is no way to lose and no clock pressure. This one is for switching off.',
   ],
 
@@ -243,6 +243,7 @@ export const search = {
       lost: false,
       // transient
       anchor: null,
+      missAt: null,
       cells: null,
       listEl: null,
       board: null,
@@ -305,9 +306,29 @@ export const search = {
       if (game.found.includes(entry.word)) for (const cell of entry.cells) lit.add(cell);
     }
 
+    // While a start is armed, the cells that lie in a straight line from it are
+    // marked faintly. It teaches the interaction without giving anything away:
+    // all eight rays are always shown, so it says "pick the far end of your
+    // word", not "your word is here".
+    const reachable = new Set();
+    if (game.anchor !== null) {
+      const ax = game.anchor % game.size;
+      const ay = Math.floor(game.anchor / game.size);
+      for (const [dx, dy] of HEADINGS) {
+        for (let i = 1; i < game.size; i++) {
+          const cx = ax + dx * i;
+          const cy = ay + dy * i;
+          if (cx < 0 || cy < 0 || cx >= game.size || cy >= game.size) break;
+          reachable.add(cy * game.size + cx);
+        }
+      }
+    }
+
     game.cells.forEach((cell, i) => {
       cell.classList.toggle('is-found', lit.has(i));
       cell.classList.toggle('is-anchor', i === game.anchor);
+      cell.classList.toggle('is-reachable', reachable.has(i));
+      cell.classList.toggle('is-miss', i === game.missAt);
     });
 
     if (game.found.length !== game.shownFound) {
@@ -332,6 +353,13 @@ export const search = {
    * First tap sets the anchor, second tap tries the line between the two.
    * Returns a move result either way so the shell saves and checks the outcome:
    * the second tap of the last word is what wins this game.
+   *
+   * A miss keeps the anchor rather than clearing it. The instinct on a grid is
+   * to trace along a word, so the tap after the first letter is usually the
+   * SECOND letter, not the last -- and throwing the start away for that made the
+   * board feel like it was cancelling your selection at random. Now the start
+   * stays put and only the tapped cell flashes, so the next tap can be the real
+   * end. Tapping the start again is still how you clear it.
    */
   onSelect(game, index) {
     if (game.anchor === null) {
@@ -344,7 +372,6 @@ export const search = {
     }
 
     const from = game.anchor;
-    game.anchor = null;
 
     const entry = game.placed.find(
       (candidate) =>
@@ -353,8 +380,13 @@ export const search = {
           (candidate.cells[0] === index && candidate.cells[candidate.cells.length - 1] === from))
     );
 
-    if (!entry) return { toast: '' };
+    if (!entry) {
+      game.missAt = index;
+      return { clearAfter: 450 };
+    }
 
+    game.anchor = null;
+    game.missAt = null;
     game.found.push(entry.word);
     return { toast: entry.word.toUpperCase() };
   },
@@ -367,11 +399,13 @@ export const search = {
     /* no cursor */
   },
 
-  clearTransient() {
-    /* the anchor is cleared by the second tap, not on a timer */
+  clearTransient(game) {
+    game.missAt = null;
   },
 
   hint(game) {
+    game.anchor = null;
+    game.missAt = null;
     const missing = game.placed.filter((entry) => !game.found.includes(entry.word));
     if (missing.length === 0) return { toast: 'You have found them all' };
 
@@ -388,6 +422,7 @@ export const search = {
     if (!window.confirm(`Clear ${game.found.length} found word(s)?`)) return {};
     game.found = [];
     game.anchor = null;
+    game.missAt = null;
     return {};
   },
 
@@ -402,7 +437,11 @@ export const search = {
   },
 
   caption(game) {
-    return `${game.found.length} of ${game.placed.length} found`;
+    const progress = `${game.found.length} of ${game.placed.length} found`;
+    // The sheet explains tap-first-then-last, but nobody reads the sheet. Say it
+    // on the board until they have done it once.
+    if (game.found.length === 0) return `${progress} · tap a word's first and last letter`;
+    return progress;
   },
 
   outcomeContent(game) {

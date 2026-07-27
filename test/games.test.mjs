@@ -696,14 +696,27 @@ test('tapping the two ends of a word finds it, and nothing else does', () => {
   const first = entry.cells[0];
   const last = entry.cells[entry.cells.length - 1];
 
-  // A wrong second tap finds nothing and clears the anchor.
+  // A wrong second tap finds nothing, flashes the cell it hit, and KEEPS the
+  // start. Clearing it was the old behaviour and it made the board feel like it
+  // was cancelling your selection at random -- the tap after the first letter is
+  // usually the second letter, not the last.
   search.onSelect(game, first);
   assert.equal(game.anchor, first);
-  search.onSelect(game, (last + 1) % game.letters.length);
+  const wrong = (last + 1) % game.letters.length;
+  const miss = search.onSelect(game, wrong);
   assert.equal(game.found.length, 0);
-  assert.equal(game.anchor, null);
+  assert.equal(game.anchor, first, 'a miss must not throw the start away');
+  assert.equal(game.missAt, wrong, 'the cell that missed should flash');
+  assert.ok(miss.clearAfter > 0, 'the flash needs to clear itself');
 
-  // The right pair finds it, in either order.
+  // The flash is transient; the start is not.
+  search.clearTransient(game);
+  assert.equal(game.missAt, null);
+  assert.equal(game.anchor, first);
+
+  // Trying again from the same start works, in either order.
+  search.onSelect(game, first);
+  assert.equal(game.anchor, null, 'tapping the start again clears it');
   search.onSelect(game, last);
   const result = search.onSelect(game, first);
   assert.equal(result.toast, entry.word.toUpperCase());
