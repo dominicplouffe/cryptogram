@@ -16,9 +16,9 @@ import { fileURLToPath } from 'node:url';
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'icons');
 const SS = 4; // supersampling factor; corners would otherwise be jagged
 
-const BG = [18, 20, 28, 255]; // #12141c
-const ACCENT = [122, 162, 247, 255]; // #7aa2f7
-const DIM = [90, 100, 130, 255]; // unsolved cell's underline
+const BG = [21, 15, 38, 255]; // #150f26 — the Arcade plum ground
+const ACCENT = [255, 93, 115, 255]; // #ff5d73 — the Arcade coral
+const DIM = [90, 72, 130, 255]; // #5a4882 — unsolved cell's underline
 
 // --- tiny RGBA raster -------------------------------------------------------
 

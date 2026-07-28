@@ -1,29 +1,55 @@
 /* ==========================================================================
-   Cryptogram
-   Mobile-first. Dark by default, light via prefers-color-scheme or an
-   explicit data-theme on <html>.
+   Plouffe Word Games — the Arcade identity.
+   Mobile-first. Dark (deep plum) by default, light via prefers-color-scheme
+   or an explicit data-theme on <html>.
+
+   Two colour systems live here and stay separate on purpose:
+
+   - Semantic colours (--locked, --warn, --error) mean right / caution / wrong
+     and are the same in every game.
+   - Identity hues (--hue-*) mean "which game is this". Each module names its
+     hue beside its icon, and the shell sets --game from it on rows, tiles,
+     the board view and the sheets. Components read var(--game) and never
+     learn the palette.
    ========================================================================== */
 
 :root {
-  --bg: #12141c;
-  --bg-raised: #1a1d28;
-  --bg-sunken: #0d0f16;
-  --line: #2a2f3f;
-  --text: #eceef5;
-  --text-dim: #9aa1b8;
-  --text-faint: #656c85;
+  --bg: #150f26;
+  --bg-raised: #221836;
+  --bg-sunken: #0e0919;
+  --line: #33254e;
+  --text: #f4efff;
+  --text-dim: #a99ac4;
+  --text-faint: #7a6c96;
 
-  --accent: #7aa2f7;
-  --accent-ink: #0d0f16;
-  --locked: #7dcfa0;
-  --warn: #e0af68;
-  --error: #f7768e;
+  --accent: #ff5d73;
+  --accent-ink: #2b0714;
+  --locked: #4be3a0;
+  --warn: #ffc24b;
+  --error: #ff4b4b;
 
-  --key-bg: #262b3a;
-  --key-active: #333a4e;
+  --key-bg: #2a1e45;
+  --key-active: #3a2c5e;
 
-  --radius: 12px;
-  --radius-lg: 18px;
+  /* One identity hue per game. Dark-theme pigments are bright; the light block
+     below darkens every one so text and marks keep their contrast on paper. */
+  --hue-coral: #ff5d73;
+  --hue-tangerine: #ff9a3d;
+  --hue-magenta: #e94bc0;
+  --hue-mint: #4be3a0;
+  --hue-cyan: #3fd8e8;
+  --hue-violet: #8c6bff;
+  --hue-amber: #ffc24b;
+  --hue-azure: #5a8bff;
+  --game: var(--accent);
+
+  /* The press bevel: tappable things sit on this and drop onto it when
+     pressed. The whole app feels like a device rather than a document. */
+  --bevel: 0 4px 0 rgba(0, 0, 0, 0.45);
+  --bevel-down: 0 1px 0 rgba(0, 0, 0, 0.45);
+
+  --radius: 16px;
+  --radius-lg: 22px;
 
   /* Overwritten per puzzle by render.js to fit the quote on screen. */
   --cell-w: 24px;
@@ -40,46 +66,142 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
-    --bg: #f5f3ee;
-    --bg-raised: #fffefb;
-    --bg-sunken: #e9e6de;
-    --line: #d8d3c7;
-    --text: #23262e;
-    --text-dim: #5f6472;
-    --text-faint: #8b90a0;
+    --bg: #f3f1fa;
+    --bg-raised: #ffffff;
+    --bg-sunken: #e9e5f4;
+    --line: #d9d3ea;
+    --text: #241c3b;
+    --text-dim: #5c5478;
+    --text-faint: #8d86a8;
 
-    --accent: #3b6ea5;
+    --accent: #d11f46;
     --accent-ink: #ffffff;
-    --locked: #2f855a;
-    --warn: #a86a12;
-    --error: #c0392b;
+    --locked: #0e7a4e;
+    --warn: #8f6400;
+    --error: #c2242e;
 
     --key-bg: #ffffff;
-    --key-active: #e4e0d6;
+    --key-active: #e6e1f3;
+
+    --hue-coral: #d11f46;
+    --hue-tangerine: #b35a00;
+    --hue-magenta: #b0208c;
+    --hue-mint: #0e7a4e;
+    --hue-cyan: #087e96;
+    --hue-violet: #5f3dd6;
+    --hue-amber: #926a00;
+    --hue-azure: #2d5fd3;
+
+    --bevel: 0 4px 0 rgba(36, 28, 59, 0.14);
+    --bevel-down: 0 1px 0 rgba(36, 28, 59, 0.14);
 
     color-scheme: light;
   }
 }
 
 :root[data-theme='light'] {
-  --bg: #f5f3ee;
-  --bg-raised: #fffefb;
-  --bg-sunken: #e9e6de;
-  --line: #d8d3c7;
-  --text: #23262e;
-  --text-dim: #5f6472;
-  --text-faint: #8b90a0;
+  --bg: #f3f1fa;
+  --bg-raised: #ffffff;
+  --bg-sunken: #e9e5f4;
+  --line: #d9d3ea;
+  --text: #241c3b;
+  --text-dim: #5c5478;
+  --text-faint: #8d86a8;
 
-  --accent: #3b6ea5;
+  --accent: #d11f46;
   --accent-ink: #ffffff;
-  --locked: #2f855a;
-  --warn: #a86a12;
-  --error: #c0392b;
+  --locked: #0e7a4e;
+  --warn: #8f6400;
+  --error: #c2242e;
 
   --key-bg: #ffffff;
-  --key-active: #e4e0d6;
+  --key-active: #e6e1f3;
+
+  --hue-coral: #d11f46;
+  --hue-tangerine: #b35a00;
+  --hue-magenta: #b0208c;
+  --hue-mint: #0e7a4e;
+  --hue-cyan: #087e96;
+  --hue-violet: #5f3dd6;
+  --hue-amber: #926a00;
+  --hue-azure: #2d5fd3;
+
+  --bevel: 0 4px 0 rgba(36, 28, 59, 0.14);
+  --bevel-down: 0 1px 0 rgba(36, 28, 59, 0.14);
 
   color-scheme: light;
+}
+
+/* Inside a game view or a sheet, the accent IS the game's hue: the selected
+   cell, the wheel's centre, the goal row, the primary button and the focus
+   ring all follow the game you are in. --game is set inline by the shell;
+   anywhere it has not been set it resolves back to the brand accent, so this
+   is safe on the settings and stats sheets too. */
+.app,
+.sheet {
+  --accent: var(--game);
+}
+
+/* --- type ----------------------------------------------------------------- */
+/* Self-hosted latin subsets (~65KB for all five), so the identity does not
+   depend on a CDN and survives a cold offline start -- they are in the service
+   worker's SHELL, and a test fails if one goes missing. Both faces are SIL OFL
+   (Poppins: Indian Type Foundry; Nunito: Vernon Adams et al).
+   font-display: swap keeps the system stack underneath so the app is never
+   blank while they load. */
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/poppins-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201A, U+201C-201E, U+2026;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('fonts/poppins-800.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201A, U+201C-201E, U+2026;
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/nunito-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201A, U+201C-201E, U+2026;
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/nunito-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201A, U+201C-201E, U+2026;
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('fonts/nunito-800.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201A, U+201C-201E, U+2026;
+}
+
+:root {
+  /* Nunito's rounded terminals match the radii; Poppins carries names, letters
+     and big numerals. Both fall back to the platform stack. */
+  --font-ui: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Poppins', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* --- reset ---------------------------------------------------------------- */
@@ -107,8 +229,7 @@ body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 16px;
   line-height: 1.45;
 
@@ -189,10 +310,14 @@ svg {
 
 .home-title {
   margin: 0;
-  font-size: 25px;
-  font-weight: 750;
+  font-family: var(--font-display);
+  /* Sized so the full name plus the streak pill and settings button share one
+     line at 360px with Poppins loaded, which is wider than the fallback. */
+  font-size: 19px;
+  font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  white-space: nowrap;
 }
 
 .home-date {
@@ -286,26 +411,30 @@ svg {
   padding: 0;
 }
 
-/* An unfilled dot has to read as "still to do", so it is outlined against the
-   page rather than filled with a near-background colour. */
+/* Each pip wears its own game's hue, so a filled row is a legend as well as a
+   meter -- a warm run means you did the quote games. Hollow / part / solid is a
+   shape difference on top of the colour one, because eight hues at eleven
+   pixels is exactly where colour vision stops being enough. An unfilled dot
+   still has to read as "still to do", so it is outlined against the page. */
 .dots li {
   width: 11px;
   height: 11px;
   border-radius: 50%;
   background: transparent;
-  border: 1.5px solid color-mix(in srgb, var(--text-faint) 65%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--game) 60%, transparent);
 }
 
 .dots li.is-solved {
-  background: var(--locked);
+  background: var(--game);
   border-color: transparent;
 }
 
 .dots li.is-progress {
-  background: color-mix(in srgb, var(--warn) 35%, transparent);
-  border-color: var(--warn);
+  background: color-mix(in srgb, var(--game) 38%, transparent);
+  border-color: var(--game);
 }
 
+/* A loss is finished but not a win; it keeps the semantic colour. */
 .dots li.is-lost {
   background: color-mix(in srgb, var(--error) 30%, transparent);
   border-color: var(--error);
@@ -384,9 +513,14 @@ svg {
 .chips {
   display: flex;
   gap: 6px;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   overflow-x: auto;
   scrollbar-width: none;
+  /* Room for the last chip to clear the fade, and a fade instead of a hard
+     clip so a half-visible chip reads as "scroll me". */
+  padding-right: 20px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 
 .chips::-webkit-scrollbar {
@@ -406,8 +540,8 @@ svg {
 }
 
 .chip[aria-pressed='true'] {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--text);
+  color: var(--bg);
   border-color: transparent;
 }
 
@@ -459,8 +593,8 @@ svg {
   flex: 0 0 auto;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
-  background: var(--bg-sunken);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--game) 16%, transparent);
   display: grid;
   place-items: center;
 }
@@ -468,7 +602,7 @@ svg {
 .row-mark svg {
   width: 26px;
   height: 26px;
-  fill: var(--accent);
+  fill: var(--game);
   stroke: none;
 }
 
@@ -483,8 +617,9 @@ svg {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 15.5px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
 }
 
 /* A status line long enough to wrap would make rows different heights, which
@@ -499,29 +634,201 @@ svg {
   flex: 0 0 auto;
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--game);
   padding: 0 10px;
 }
 
-.row-more {
+/* --- the hero card -------------------------------------------------------- */
+/* The one obvious thing to tap. Draws from the same daily state as everything
+   else and shows a decorative mark, never a live board. */
+
+.hero-card {
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      130% 110% at 100% 0%,
+      color-mix(in srgb, var(--game) 26%, transparent),
+      transparent 65%
+    ),
+    var(--bg-raised);
+  border: 1px solid color-mix(in srgb, var(--game) 35%, var(--line));
+  box-shadow: var(--bevel);
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.hero-card:active {
+  transform: translateY(3px);
+  box-shadow: var(--bevel-down);
+}
+
+.hero-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 15px 15px 13px;
+  gap: 2px;
+}
+
+.hero-kicker {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--game);
+}
+
+.hero-name {
+  margin-top: 3px;
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.hero-blurb {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.hero-foot {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 13px;
+  width: 100%;
+}
+
+.hero-mark {
   flex: 0 0 auto;
-  width: 42px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--game) 18%, transparent);
   display: grid;
   place-items: center;
-  color: var(--text-faint);
-  border-left: 1px solid var(--line);
 }
 
-.row-more:active {
-  background: var(--key-active);
-  color: var(--text);
-}
-
-.row-more svg {
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
+.hero-mark svg {
+  width: 23px;
+  height: 23px;
+  fill: var(--game);
   stroke: none;
+}
+
+.hero-mark svg .dim {
+  fill: color-mix(in srgb, var(--game) 42%, transparent);
+}
+
+.hero-mark svg .ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--game) 55%, transparent);
+  stroke-width: 26;
+}
+
+.hero-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-cta {
+  flex: 0 0 auto;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--game);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+/* --- the library tiles ----------------------------------------------------- */
+/* Two columns, each tinted with its game's hue: the colour system's home. */
+
+.tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.game-tile {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--game) 15%, var(--bg-raised)),
+    var(--bg-raised) 74%
+  );
+  border: 1px solid color-mix(in srgb, var(--game) 28%, var(--line));
+  box-shadow: var(--bevel);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.game-tile:active {
+  transform: translateY(3px);
+  box-shadow: var(--bevel-down);
+}
+
+.tile-main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 12px 11px;
+  text-align: left;
+}
+
+.tile-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+}
+
+.tile-rec {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  margin-top: -5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* The way into a game's sheet. 40px of target in the tile's corner. */
+.tile-info {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--game) 75%, var(--text-dim));
+}
+
+.tile-info svg {
+  width: 17px;
+  height: 17px;
+}
+
+.tile-info:active {
+  color: var(--text);
 }
 
 .home-foot {
@@ -544,8 +851,8 @@ svg {
   flex: 0 0 auto;
   width: 46px;
   height: 46px;
-  border-radius: 11px;
-  background: var(--bg-sunken);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--game) 16%, transparent);
   display: grid;
   place-items: center;
 }
@@ -553,18 +860,22 @@ svg {
 .game-mark svg {
   width: 30px;
   height: 30px;
-  fill: var(--accent);
+  fill: var(--game);
   stroke: none;
 }
 
-.game-mark svg .dim {
-  fill: var(--text-faint);
+/* The de-emphasised parts of a mark follow the game's hue at lower strength,
+   so all eight icons recolour themselves from one custom property. */
+.game-mark svg .dim,
+.row-mark svg .dim {
+  fill: color-mix(in srgb, var(--game) 42%, transparent);
 }
 
 /* A hollow shape, for "this one is missing". */
-.game-mark svg .ring {
+.game-mark svg .ring,
+.row-mark svg .ring {
   fill: none;
-  stroke: var(--text-faint);
+  stroke: color-mix(in srgb, var(--game) 55%, transparent);
   stroke-width: 26;
 }
 
@@ -627,12 +938,37 @@ svg {
 /* --- game frame ----------------------------------------------------------- */
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: calc(var(--safe-t) + 8px) 10px 8px;
+  padding: calc(var(--safe-t) + 10px) 10px 8px;
   border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
+}
+
+/* The cheapest possible orientation cue: a 3px bar in the game's hue. */
+.topbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--game);
+}
+
+/* Elapsed time as its own pill, where the eye can find it without reading. */
+.timer-pill {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .topbar-center {
@@ -645,8 +981,9 @@ svg {
 }
 
 .mode-label {
+  font-family: var(--font-display);
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 
@@ -674,6 +1011,51 @@ svg {
 .icon-btn:active {
   background: var(--key-active);
   color: var(--text);
+}
+
+/* --- status strip ---------------------------------------------------------- */
+/* Each module's progress(), given a fixed home with a real bar in the game's
+   colour. Word Wheel and Boxed gain the most: their appeal is a number
+   climbing, and now it visibly climbs. */
+
+.status-strip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.strip-label,
+.strip-note {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.strip-note:empty {
+  display: none;
+}
+
+.strip-bar {
+  flex: 1 1 auto;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--game) 18%, transparent);
+  overflow: hidden;
+}
+
+.strip-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--game);
+  transition: width 0.3s ease;
 }
 
 /* --- puzzle --------------------------------------------------------------- */
@@ -729,6 +1111,7 @@ svg {
 .cell-value {
   display: grid;
   place-items: center;
+  font-family: var(--font-display);
 
   /* Inset from the cell so each letter gets its own underline instead of the
      whole word running together as one bar. Insetting rather than adding a gap
@@ -820,6 +1203,20 @@ svg {
   75% { transform: translateX(2px); }
 }
 
+/* The signature move: a placed letter pops through every copy of itself,
+   staggered outward by distance (--rip is set per cell by the game). Spring
+   curve, ~10% overshoot -- this is the Arcade in one animation. */
+.cell.is-pop .cell-value {
+  animation: cell-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: var(--rip, 0ms);
+}
+
+@keyframes cell-pop {
+  0% { transform: none; }
+  40% { transform: translateY(-3px) scale(1.12); }
+  100% { transform: none; }
+}
+
 /* --- Fiver board ---------------------------------------------------------- */
 
 .fiver-board {
@@ -837,6 +1234,7 @@ svg {
 }
 
 .tile {
+  font-family: var(--font-display);
   /* Square, and sized so six rows plus the keyboard clear a 568px screen. */
   width: min(56px, 13.5vw);
   height: min(56px, 13.5vw);
@@ -985,6 +1383,7 @@ svg {
 /* What you are typing. Holds its height when empty so the wheel below does not
    jump on the first keystroke. */
 .wheel-input {
+  font-family: var(--font-display);
   min-height: 34px;
   font-size: 24px;
   font-weight: 750;
@@ -998,22 +1397,34 @@ svg {
   letter-spacing: 0.2em;
 }
 
-/* A grid rather than a wrapping flex row: seven or eight letters wrapping freely
-   leaves one stranded on its own line. Columns are set to half the count so it
-   always breaks into two even rows. */
+/* An actual wheel: the outer letters sit on a circle around the compulsory
+   centre. Each key carries its spoke angle in --ang; the counter-rotation
+   keeps the glyph upright. */
 .wheel-ring {
-  display: grid;
-  grid-template-columns: repeat(var(--wheel-cols), auto);
-  justify-content: center;
-  gap: 8px;
+  --wheel-size: min(64vw, 250px);
+  position: relative;
+  width: var(--wheel-size);
+  height: var(--wheel-size);
+  margin: 6px 0 2px;
 }
 
-.wheel-hub {
-  display: flex;
-  justify-content: center;
+/* The rim the letters sit on. Decoration, so it never blocks a tap. */
+.wheel-ring::before {
+  content: '';
+  position: absolute;
+  inset: 23px;
+  border: 1.5px dashed color-mix(in srgb, var(--game) 32%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .wheel-key {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(var(--ang)) translate(calc(var(--wheel-size) / 2 - 23px))
+    rotate(calc(-1 * var(--ang)));
+  font-family: var(--font-display);
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -1023,21 +1434,26 @@ svg {
   color: var(--text);
   font-size: 20px;
   font-weight: 700;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+  box-shadow: var(--bevel);
 }
 
 .wheel-key:active {
   background: var(--key-active);
-  transform: translateY(1px);
+  box-shadow: var(--bevel-down);
 }
 
-/* The compulsory letter, sitting on its own below the ring. */
+/* The compulsory letter, at the hub of the wheel. */
 .wheel-key.is-centre {
-  background: var(--accent);
+  transform: translate(-50%, -50%);
+  background: var(--game);
   color: var(--accent-ink);
-  width: 54px;
-  height: 54px;
+  width: 56px;
+  height: 56px;
   font-size: 24px;
+}
+
+.wheel-key.is-centre:active {
+  filter: brightness(0.92);
 }
 
 /* Chips rather than a column: the list is the reward in this game and it has to
@@ -1091,6 +1507,7 @@ svg {
 }
 
 .search-cell {
+  font-family: var(--font-display);
   display: grid;
   place-items: center;
   border-radius: 4px;
@@ -1217,6 +1634,7 @@ svg {
 }
 
 .boxed-tile {
+  font-family: var(--font-display);
   width: 46px;
   height: 46px;
   border-radius: 12px;
@@ -1226,13 +1644,15 @@ svg {
   color: var(--text);
   font-size: 20px;
   font-weight: 700;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
-  transition: background-color 0.12s ease, opacity 0.12s ease;
+  box-shadow: var(--bevel);
+  transition: background-color 0.12s ease, box-shadow 0.08s ease, transform 0.08s ease,
+    opacity 0.12s ease;
 }
 
 .boxed-tile:active {
   background: var(--key-active);
-  transform: translateY(1px);
+  transform: translateY(3px);
+  box-shadow: var(--bevel-down);
 }
 
 /* A letter already used. The goal is to have all twelve wearing this. */
@@ -1250,6 +1670,7 @@ svg {
 
 /* What you are typing. Holds its height when empty so the frame does not jump. */
 .boxed-input {
+  font-family: var(--font-display);
   min-height: 30px;
   font-size: 21px;
   font-weight: 750;
@@ -1372,27 +1793,37 @@ svg {
   min-height: 1.2em;
 }
 
-/* --- toolbar -------------------------------------------------------------- */
+/* --- the deck ------------------------------------------------------------- */
+/* Tools and keys share one panel: two zones on screen (board, deck) instead of
+   three floating strips. When a game declares keyboard: null the key rows are
+   gone and the deck is just the tool row. */
+
+.deck {
+  flex: 0 0 auto;
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--line);
+  padding-bottom: calc(var(--safe-b) + 10px);
+}
 
 .toolbar {
   display: flex;
-  gap: 6px;
-  padding: 8px 10px;
-  border-top: 1px solid var(--line);
-  flex: 0 0 auto;
+  gap: 7px;
+  padding: 9px 8px 0;
 }
 
+/* One stroked-SVG vocabulary, label beside the glyph: one row, not two. */
 .tool-btn {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 2px;
-  border-radius: var(--radius);
-  color: var(--text-dim);
-  min-height: 44px;
   justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 4px;
+  border-radius: 11px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
 }
 
 .tool-btn:active {
@@ -1405,14 +1836,15 @@ svg {
   cursor: default;
 }
 
-.tool-icon {
-  font-size: 15px;
-  line-height: 1;
+.tool-btn svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
 .tool-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
@@ -1422,10 +1854,8 @@ svg {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 5px calc(var(--safe-b) + 8px);
-  background: var(--bg-sunken);
-  border-top: 1px solid var(--line);
+  gap: 9px;
+  padding: 10px 5px 0;
 }
 
 .krow {
@@ -1438,22 +1868,26 @@ svg {
   flex: 1 1 0;
   min-width: 0;
   height: 46px;
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--key-bg);
+  font-family: var(--font-display);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
   display: grid;
   place-items: center;
   user-select: none;
   -webkit-user-select: none;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
-  transition: background-color 0.08s ease, transform 0.08s ease, opacity 0.12s ease;
+  /* The bevel: a key is a physical thing that sits proud and presses down. */
+  box-shadow: var(--bevel);
+  transition: background-color 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease,
+    opacity 0.12s ease;
 }
 
 .key:active {
   background: var(--key-active);
-  transform: translateY(1px);
+  transform: translateY(3px);
+  box-shadow: var(--bevel-down);
 }
 
 /* Letters already assigned somewhere: dimmed so the remaining alphabet is
@@ -1599,8 +2033,9 @@ svg {
 
 .sheet-title {
   margin: 0 0 4px;
+  font-family: var(--font-display);
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
   text-align: center;
 }
 
@@ -1661,13 +2096,67 @@ svg {
 
 /* --- win sheet ------------------------------------------------------------ */
 
+/* A wash of the game's hue behind the headline. Purely celebratory, so the
+   loss sheet drops it. */
+.win-glow {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 150px;
+  border-radius: inherit;
+  background: radial-gradient(
+    85% 100% at 50% 0%,
+    color-mix(in srgb, var(--game) 22%, transparent),
+    transparent 75%
+  );
+  pointer-events: none;
+}
+
+.sheet-loss .win-glow {
+  display: none;
+}
+
+/* "Daily solved · no hints" -- the compliment version of a hint counter. */
+.win-badge {
+  position: relative;
+  display: flex;
+  width: fit-content;
+  margin: 4px auto 12px;
+  align-items: center;
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--game);
+  background: color-mix(in srgb, var(--game) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--game) 35%, transparent);
+}
+
+.sheet-loss .win-badge {
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  border-color: var(--line);
+}
+
 .win-quote {
   margin: 14px 0 6px;
   padding: 0;
   text-align: center;
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.5;
-  font-weight: 500;
+  font-weight: 700;
+}
+
+/* The staggered reveal: the quote was earned, so it arrives word by word. */
+.win-word {
+  display: inline-block;
+  animation: win-word 0.38s ease both;
+}
+
+@keyframes win-word {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 
 .win-quote::before { content: '\201C'; }
@@ -1734,8 +2223,9 @@ svg {
 .win-stats dd,
 .stat-grid dd {
   margin: 3px 0 0;
+  font-family: var(--font-display);
   font-size: 19px;
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1749,6 +2239,46 @@ svg {
 
 .win-note:empty {
   display: none;
+}
+
+/* The streak counting up: the one stat on this sheet that moves. */
+.win-stats dd.tick {
+  animation: stat-tick 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: var(--warn);
+}
+
+@keyframes stat-tick {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+/* The spoiler-free share card: the preview shows exactly what will be sent. */
+.win-share {
+  display: flex;
+  align-items: stretch;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.share-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  border: 1px dashed var(--line);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.win-share .btn {
+  align-self: center;
 }
 
 /* --- segmented controls --------------------------------------------------- */
@@ -1803,8 +2333,9 @@ svg {
 
 .gs-name {
   margin: 0;
+  font-family: var(--font-display);
   font-size: 20px;
-  font-weight: 750;
+  font-weight: 800;
   letter-spacing: -0.01em;
 }
 
@@ -1895,11 +2426,14 @@ svg {
   z-index: 0;
 }
 
+/* Letterforms, not squares: word-game confetti. Colour set inline per chip. */
 .confetti i {
   position: absolute;
-  top: -12px;
-  width: 8px;
-  height: 14px;
+  top: -16px;
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
   opacity: 0;
   animation: fall 1.5s ease-in forwards;
 }

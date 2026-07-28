@@ -69,6 +69,8 @@ export const vowels = {
   name: 'Missing Vowels',
   blurb: 'Put the vowels back into the quote.',
   category: 'Quotes',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'tangerine',
   // Rings rather than blocks, with the middle one hollow: a row of vowels with
   // one taken out. Deliberately unlike Cryptogram's cells, which read almost
   // identically at icon size.
@@ -321,6 +323,26 @@ export const vowels = {
       body: game.original ?? game.plain,
       caption: game.author ? `— ${game.author}` : '',
     };
+  },
+
+  /** The status strip: vowels restored so far. */
+  progress(game) {
+    const filled = game.slots.filter((slot) => game.filled[slot]).length;
+    return {
+      label: `${filled} of ${game.slots.length} vowels`,
+      value: filled,
+      max: game.slots.length,
+      note: game.hintsUsed > 0 ? `${game.hintsUsed} hint${game.hintsUsed === 1 ? '' : 's'}` : '',
+    };
+  },
+
+  /** Spoiler-free share lines; the shell adds the header. */
+  shareLines(game) {
+    const hints = game.hintsUsed ?? 0;
+    return [
+      `Vowels restored in ${formatTime(game.elapsedMs)} \u00b7 ${game.slots.length} gaps`,
+      hints === 0 ? 'No hints \ud83d\udd25' : `${hints} hint${hints === 1 ? '' : 's'}`,
+    ];
   },
 
   statusFor(snapshot, { difficultyLabel }) {

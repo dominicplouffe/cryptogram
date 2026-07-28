@@ -91,6 +91,19 @@ export function previousDateKey(dateKey) {
  * @param {Date} [now]
  * @returns {number}
  */
+/** The date the first daily shipped; #1. Shared by every game's share card. */
+const DAILY_EPOCH = '2026-07-21';
+
+/**
+ * The daily's number, for share cards: "#8" travels better than a date, and it
+ * is the same for every player on the same day.
+ * @param {string} dateKey YYYY-MM-DD
+ */
+export function dailyNumber(dateKey) {
+  const ms = new Date(`${dateKey}T00:00:00`) - new Date(`${DAILY_EPOCH}T00:00:00`);
+  return Math.max(1, Math.round(ms / 86_400_000) + 1);
+}
+
 export function msUntilLocalMidnight(now = new Date()) {
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   return next.getTime() - now.getTime();
@@ -129,12 +142,17 @@ export function formatTime(ms) {
 
 // --- app settings -----------------------------------------------------------
 
-const DEFAULT_APP_SETTINGS = { theme: 'auto' };
+// Sound is opt-in: an app that makes noise uninvited gets muted at the OS
+// level and never turned back on. Haptics are opt-out: silent, light, and only
+// firing on hardware that supports them at all.
+const DEFAULT_APP_SETTINGS = { theme: 'auto', sound: false, haptics: true };
 
 export function loadAppSettings() {
   const stored = readJSON(`${NS}settings`, {});
   const settings = { ...DEFAULT_APP_SETTINGS, ...stored };
   if (!['auto', 'dark', 'light'].includes(settings.theme)) settings.theme = 'auto';
+  settings.sound = Boolean(settings.sound);
+  settings.haptics = Boolean(settings.haptics);
   return settings;
 }
 

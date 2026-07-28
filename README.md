@@ -150,14 +150,18 @@ tools/make-words.mjs    regenerates src/words.js
 1. Write a module in `src/games/` satisfying the same contract as the existing
    eight — `createGame`, `hydrate`, `toSnapshot`, `mount`, `paint`, `onKey`,
    `isSolved`, `statusFor`, and so on. Alongside the rules it declares its own
-   presentation: `name`, `blurb`, `icon`, a `category` for the filter chips, and
-   `howTo`, the lines of plain prose its sheet shows.
+   presentation: `name`, `blurb`, `icon`, a `category` for the filter chips, a
+   `hue` naming one of the `--hue-*` tokens in `styles.css` (the shell paints
+   the game's row, tile, board and sheets with it), `howTo`, the lines of plain
+   prose its sheet shows, `progress`, the status strip's label / value / max /
+   note, and `shareLines`, the spoiler-free lines of its share card -- a test
+   fails if a card leaks an answer, a quote or a hidden word.
 2. Add it to `src/games/registry.js`.
 3. Add its file to `SHELL` in `sw.js`, or it will be missing on a cold offline
    start. There is a test that fails if you forget.
 
-The home row, its sheet, the stats row, the dot meter and progress pruning all
-follow from the registry; there is no HTML to edit.
+The home row, the library tile, its sheet, the stats row, the dot meter and
+progress pruning all follow from the registry; there is no HTML to edit.
 
 Three rules worth knowing:
 

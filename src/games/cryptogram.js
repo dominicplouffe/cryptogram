@@ -80,6 +80,8 @@ export const cryptogram = {
   name: 'Cryptogram',
   blurb: 'Decode the quote, one letter at a time.',
   category: 'Quotes',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'coral',
   icon: `<svg viewBox="0 0 512 512">
       <rect x="61" y="159" width="102" height="128" rx="18" />
       <rect x="61" y="317" width="102" height="28" rx="14" />
@@ -228,6 +230,20 @@ export const cryptogram = {
         wrong: game.wrongLetters.has(code),
       });
     });
+
+    // The signature move: a placed letter ripples outward through its peers,
+    // staggered by distance, so you see the guess land everywhere at once.
+    if (game.justSet) {
+      const { code, at } = game.justSet;
+      game.justSet = null;
+      game.cells.forEach((el, i) => {
+        if (!el || el.dataset.key !== code) return;
+        el.style.setProperty('--rip', `${Math.min(Math.abs(i - at) * 16, 480)}ms`);
+        el.classList.remove('is-pop');
+        void el.offsetWidth; // restart the animation
+        el.classList.add('is-pop');
+      });
+    }
   },
 
   paintKeys(game, keys) {
@@ -259,6 +275,9 @@ export const cryptogram = {
 
     game.guesses[code] = key;
     game.wrongLetters.delete(code);
+    // The peer ripple starts from the cell that was answered: paint staggers
+    // the highlight outward so the guess visibly lands everywhere at once.
+    game.justSet = { code, at: game.selectedIndex };
     const advance = nextOpenIndex(game, game.selectedIndex);
     if (advance !== null) game.selectedIndex = advance;
     return {};
@@ -368,6 +387,29 @@ export const cryptogram = {
       body: game.original ?? game.plain,
       caption: game.author ? `— ${game.author}` : '',
     };
+  },
+
+  /** The status strip: letters placed, and what the hints have cost. */
+  progress(game) {
+    const filled = game.letters.filter((code) => game.guesses[code]).length;
+    return {
+      label: `${filled} of ${game.letters.length} letters`,
+      value: filled,
+      max: game.letters.length,
+      note: game.hintsUsed > 0 ? `${game.hintsUsed} hint${game.hintsUsed === 1 ? '' : 's'}` : '',
+    };
+  },
+
+  /**
+   * The spoiler-free share card lines. The shell adds the "Cryptogram #N"
+   * header; nothing here reveals the quote.
+   */
+  shareLines(game) {
+    const hints = game.hintsUsed ?? 0;
+    return [
+      `Decoded in ${formatTime(game.elapsedMs)} \u00b7 ${game.letters.length} letters`,
+      hints === 0 ? 'No hints \ud83d\udd25' : `${hints} hint${hints === 1 ? '' : 's'}`,
+    ];
   },
 
   /**

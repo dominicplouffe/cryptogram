@@ -68,7 +68,7 @@ test('a throwing storage degrades instead of crashing', () => {
   // Safari private mode: everything must still return sane values.
   assert.doesNotThrow(() => store.saveAppSettings({ theme: 'dark' }));
   assert.doesNotThrow(() => store.recordStart('cryptogram'));
-  assert.deepEqual(store.loadAppSettings(), { theme: 'auto' });
+  assert.deepEqual(store.loadAppSettings(), { theme: 'auto', sound: false, haptics: true });
   assert.equal(store.loadStats('cryptogram').solved, 0);
 
   globalThis.localStorage = original;
@@ -91,7 +91,7 @@ test('previousDateKey crosses month, year and leap boundaries', () => {
 
 test('app settings round-trip and reject unknown themes', () => {
   reset();
-  assert.deepEqual(store.loadAppSettings(), { theme: 'auto' });
+  assert.deepEqual(store.loadAppSettings(), { theme: 'auto', sound: false, haptics: true });
   store.saveAppSettings({ theme: 'dark' });
   assert.equal(store.loadAppSettings().theme, 'dark');
 

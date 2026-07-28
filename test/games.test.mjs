@@ -24,17 +24,22 @@ const GAMES = [cryptogram, fiver, vowels, hidden, ladder, wheel, boxed, search];
 
 test('every game satisfies the module contract', () => {
   const required = [
-    'id', 'name', 'blurb', 'category', 'icon', 'howTo', 'tools', 'keyboard',
+    'id', 'name', 'blurb', 'category', 'icon', 'hue', 'howTo', 'tools', 'keyboard',
     'createGame', 'hydrate', 'toSnapshot', 'mount', 'paint', 'paintKeys',
     'onKey', 'onSelect', 'move', 'clearTransient',
-    'isSolved', 'isLost', 'caption', 'outcomeContent', 'statusFor',
+    'isSolved', 'isLost', 'caption', 'outcomeContent', 'statusFor', 'shareLines',
   ];
+
+  // The hues styles.css actually defines. A typo here is an invisible failure:
+  // var(--hue-nope) resolves to nothing and the mark silently goes black.
+  const HUES = ['coral', 'tangerine', 'magenta', 'mint', 'cyan', 'violet', 'amber', 'azure'];
 
   for (const mod of GAMES) {
     for (const key of required) {
       assert.ok(mod[key] !== undefined, `${mod.id} is missing ${key}`);
     }
     assert.ok(Array.isArray(mod.tools), `${mod.id}.tools`);
+    assert.ok(HUES.includes(mod.hue), `${mod.id}.hue "${mod.hue}" is not a defined --hue-*`);
     // keyboard is either a layout or explicitly null (Word Search plays on the board).
     assert.ok(
       mod.keyboard === null || Array.isArray(mod.keyboard.rows),
@@ -47,6 +52,36 @@ test('every game satisfies the module contract', () => {
     );
     if (mod.difficulties) {
       assert.ok(mod.difficulties[mod.defaultDifficulty], `${mod.id} default not in difficulties`);
+    }
+  }
+});
+
+test('every game writes a usable share card', () => {
+  // The card is spoiler-free by contract: no game may put its quote, answer or
+  // any hidden word in it. Checked against a board in its just-created state,
+  // which is the least information a card can carry.
+  for (const mod of GAMES) {
+    const difficulty = mod.difficulties ? mod.defaultDifficulty : null;
+    const game = mod.createGame({ mode: 'daily', difficulty, dateKey: '2026-08-01' });
+    const lines = mod.shareLines(game);
+
+    assert.ok(Array.isArray(lines) && lines.length >= 1, `${mod.id}.shareLines`);
+    for (const line of lines) {
+      assert.equal(typeof line, 'string', `${mod.id}: a share line is not a string`);
+      assert.ok(!line.includes('\n'), `${mod.id}: one line per array entry`);
+    }
+
+    const card = lines.join('\n').toUpperCase();
+    // The obvious leaks. Ladder's endpoints are public and allowed.
+    if (game.answer) assert.ok(!card.includes(game.answer.toUpperCase()), `${mod.id} leaks its answer`);
+    if (game.plain) {
+      const firstWord = game.plain.split(' ')[0];
+      if (firstWord.length >= 4) assert.ok(!card.includes(firstWord), `${mod.id} leaks its quote`);
+    }
+    if (game.placed) {
+      for (const entry of game.placed) {
+        assert.ok(!card.includes(entry.word.toUpperCase()), `${mod.id} leaks ${entry.word}`);
+      }
     }
   }
 });

@@ -9,7 +9,7 @@
 // of bug entirely. The cache is still a complete copy, so offline play is
 // unaffected.
 
-const CACHE_VERSION = 'plouffe-word-games-v11';
+const CACHE_VERSION = 'plouffe-word-games-v12';
 
 // Relative paths so the worker also works from a GitHub Pages subdirectory.
 const SHELL = [
@@ -22,6 +22,7 @@ const SHELL = [
   'src/quotes.js',
   'src/store.js',
   'src/render.js',
+  'src/sound.js',
   'src/words.js',
   'src/games/registry.js',
   'src/games/boxed.js',
@@ -35,6 +36,14 @@ const SHELL = [
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  // The identity type. Missing from a cold offline start, the whole app
+  // renders in fallback -- a test walks styles.css and fails if one of these
+  // drops out of step.
+  'fonts/poppins-700.woff2',
+  'fonts/poppins-800.woff2',
+  'fonts/nunito-600.woff2',
+  'fonts/nunito-700.woff2',
+  'fonts/nunito-800.woff2',
 ];
 
 self.addEventListener('install', (event) => {

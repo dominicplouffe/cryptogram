@@ -9,8 +9,8 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
     />
     <meta name="description" content="Plouffe Word Games. Word puzzles for your phone." />
-    <meta name="theme-color" content="#12141c" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#150f26" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f3f1fa" media="(prefers-color-scheme: light)" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -71,6 +71,13 @@
         <ol class="dots" id="today-dots" aria-hidden="true"></ol>
         <p class="today-note" id="today-note"></p>
 
+        <!-- The day's featured puzzle: one card, one obvious thing to tap. It
+             rotates through the games by date and always shows a daily still to
+             play, so it never duplicates a finished one. Rendered by paintHome;
+             it draws a decorative mark, never a live board, so the played count
+             stays honest. -->
+        <div class="hero-card" id="hero-card" data-list="today" hidden></div>
+
         <ul class="rows" id="list-today" data-list="today"></ul>
 
         <div class="today-done" id="today-done" hidden>
@@ -84,17 +91,20 @@
         </div>
       </section>
 
-      <!-- Appears once there are enough games to be worth filtering. -->
-      <div class="chips" id="chips" role="group" aria-label="Filter by kind" hidden></div>
-
-      <!-- Every game, always, whatever today's dailies have done. Rows are
-           generated from src/games/registry.js, so adding a game needs no change
-           here. Tapping one starts a fresh puzzle. -->
+      <!-- Every game, always, whatever today's dailies have done: a two-column
+           tile grid, each tile tinted with its game's hue. Different shape from
+           the Today rows on purpose -- different shape, different meaning.
+           Tiles are generated from src/games/registry.js, so adding a game
+           needs no change here. Tapping one starts a fresh puzzle; the corner
+           button opens its sheet. -->
       <section class="group" aria-labelledby="games-head">
         <h2 class="home-section" id="games-head">
-          Games <span class="section-note">&middot; free play, any time</span>
+          All games <span class="section-note">&middot; free play, any time</span>
         </h2>
-        <ul class="rows" id="list-games" data-list="games"></ul>
+        <!-- Appears once there are enough games to be worth filtering. Sits
+             under the heading of the list it actually filters. -->
+        <div class="chips" id="chips" role="group" aria-label="Filter by kind" hidden></div>
+        <ul class="tiles" id="list-games" data-list="games"></ul>
       </section>
 
       <button class="home-foot" id="home-foot" type="button"></button>
@@ -104,6 +114,9 @@
          Game shell: shared by every game
          ================================================================ -->
     <div class="app" id="view-game" hidden>
+      <!-- The 3px bar under the notch is the game's hue: the cheapest possible
+           "which game am I in" cue. Identity in the middle, elapsed time as its
+           own pill on the right where the eye can find it without reading. -->
       <header class="topbar">
         <button class="icon-btn" id="btn-home" type="button" aria-label="Back to home">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -113,12 +126,10 @@
 
         <div class="topbar-center">
           <span class="mode-label" id="game-label">Cryptogram</span>
-          <span class="topbar-sub">
-            <span id="game-sub">Daily</span>
-            <span class="dot" aria-hidden="true">&middot;</span>
-            <span id="timer" aria-label="Elapsed time">0:00</span>
-          </span>
+          <span class="topbar-sub"><span id="game-sub">Daily</span></span>
         </div>
+
+        <span class="timer-pill" id="timer" aria-label="Elapsed time">0:00</span>
 
         <button class="icon-btn" id="btn-stats" type="button" aria-label="Statistics">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -127,46 +138,78 @@
         </button>
       </header>
 
+      <!-- Every game computes a progress line; this strip gives it a fixed home
+           with a real bar in the game's colour, instead of a caption floating
+           under the board. Painted from each module's progress(). -->
+      <div class="status-strip" id="status-strip" hidden>
+        <span class="strip-label" id="strip-label"></span>
+        <span class="strip-bar" aria-hidden="true"><i id="strip-fill"></i></span>
+        <span class="strip-note" id="strip-note"></span>
+      </div>
+
       <main class="stage">
         <div class="puzzle" id="puzzle" role="group" aria-label="Puzzle"></div>
         <p class="author" id="caption" aria-live="polite"></p>
       </main>
 
-      <!-- Each game declares which of these it uses; the rest are hidden. -->
-      <div class="toolbar" id="toolbar">
-        <button class="tool-btn" data-tool="hint" type="button">
-          <span class="tool-icon" aria-hidden="true">&#128161;</span>
-          <span class="tool-label">Hint</span>
-        </button>
-        <button class="tool-btn" data-tool="check" type="button">
-          <span class="tool-icon" aria-hidden="true">&#10003;</span>
-          <span class="tool-label">Check</span>
-        </button>
-        <button class="tool-btn" data-tool="reset" type="button">
-          <span class="tool-icon" aria-hidden="true">&#8635;</span>
-          <span class="tool-label">Reset</span>
-        </button>
-        <button class="tool-btn" data-tool="new" type="button">
-          <span class="tool-icon" aria-hidden="true">&#9654;</span>
-          <span class="tool-label">New</span>
-        </button>
-      </div>
+      <!-- One deck: tools and keys share a panel instead of floating as two
+           strips. Each game declares which tools it uses; the rest are hidden,
+           and a game with keyboard: null hands the key rows' height back. -->
+      <div class="deck">
+        <div class="toolbar" id="toolbar">
+          <button class="tool-btn" data-tool="hint" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 18h6M10 21h4" />
+              <path d="M12 3a6 6 0 0 0-3.5 10.9c.4.3.6.8.6 1.3v.8h5.8v-.8c0-.5.2-1 .6-1.3A6 6 0 0 0 12 3z" />
+            </svg>
+            <span class="tool-label">Hint</span>
+          </button>
+          <button class="tool-btn" data-tool="check" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12.5l5 5L20 6.5" />
+            </svg>
+            <span class="tool-label">Check</span>
+          </button>
+          <button class="tool-btn" data-tool="reset" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 4v6h6M20 20v-6h-6" />
+              <path d="M20 10a8 8 0 0 0-14.3-3.7M4 14a8 8 0 0 0 14.3 3.7" />
+            </svg>
+            <span class="tool-label">Reset</span>
+          </button>
+          <button class="tool-btn" data-tool="new" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 4.5l12 7.5-12 7.5z" />
+            </svg>
+            <span class="tool-label">New</span>
+          </button>
+        </div>
 
-      <div class="keyboard" id="keyboard" role="group" aria-label="Keyboard"></div>
+        <div class="keyboard" id="keyboard" role="group" aria-label="Keyboard"></div>
+      </div>
     </div>
 
-    <!-- Outcome -->
+    <!-- Outcome: the ten seconds that earn the review. The quote is the prize,
+         so it gets the display treatment; the third stat counts up because the
+         streak rising is the actual reward; and the share card is spoiler-free
+         by contract -- each module writes its own lines. -->
     <dialog class="sheet" id="dlg-win" aria-labelledby="win-title">
+      <div class="win-glow" aria-hidden="true"></div>
       <div class="confetti" id="confetti" aria-hidden="true"></div>
+      <span class="win-badge" id="win-badge"></span>
       <h2 class="sheet-title" id="win-title">Solved!</h2>
       <blockquote class="win-quote" id="win-body"></blockquote>
       <p class="win-author" id="win-caption"></p>
       <dl class="win-stats">
         <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
-        <div><dt>Hints</dt><dd id="win-hints">0</dd></div>
-        <div><dt>Daily streak</dt><dd id="win-streak">0</dd></div>
+        <div><dt>Best</dt><dd id="win-best">&mdash;</dd></div>
+        <div><dt>Streak</dt><dd id="win-streak">0</dd></div>
       </dl>
       <p class="win-note" id="win-note"></p>
+      <div class="win-share">
+        <pre class="share-preview" id="share-preview"></pre>
+        <button class="btn btn-compact" id="btn-win-share" type="button">Share</button>
+      </div>
       <div class="sheet-actions">
         <button class="btn btn-primary" id="btn-win-next" type="button">Play again</button>
         <button class="btn" id="btn-win-home" type="button">Home</button>
@@ -276,6 +319,25 @@
         <button class="seg" type="button" data-theme="dark">Dark</button>
         <button class="seg" type="button" data-theme="light">Light</button>
       </div>
+
+      <h3 class="sheet-subtitle">Sound</h3>
+      <div class="segmented" id="seg-sound" role="group" aria-label="Sound">
+        <button class="seg" type="button" data-sound="off">Off</button>
+        <button class="seg" type="button" data-sound="on">On</button>
+      </div>
+      <p class="hint-text">
+        Synthesised, tiny, and off by default. Key taps, right and wrong answers,
+        and a little fanfare when you solve.
+      </p>
+
+      <h3 class="sheet-subtitle">Vibration</h3>
+      <div class="segmented" id="seg-haptics" role="group" aria-label="Vibration">
+        <button class="seg" type="button" data-haptics="off">Off</button>
+        <button class="seg" type="button" data-haptics="on">On</button>
+      </div>
+      <p class="hint-text">
+        A light tick on key presses and results, on phones that support it.
+      </p>
 
       <h3 class="sheet-subtitle">Streaks</h3>
       <p class="hint-text">

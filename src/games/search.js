@@ -11,6 +11,7 @@
 
 import { hashString, localDateKey, mulberry32, orderBySeed } from '../cipher.js';
 import { SEARCH_WORDS } from '../words.js';
+import { formatTime } from '../store.js';
 
 const DIFFICULTIES = {
   easy: { label: 'Easy', size: 8, words: 6, back: false },
@@ -181,6 +182,8 @@ export const search = {
   name: 'Word Search',
   blurb: 'Find the hidden words in the grid.',
   category: 'Grids',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'azure',
   // A grid with a diagonal run picked out of it.
   icon: `<svg viewBox="0 0 512 512">
       <rect x="56" y="56" width="92" height="92" rx="16" />
@@ -447,11 +450,11 @@ export const search = {
   },
 
   caption(game) {
-    const progress = `${game.found.length} of ${game.placed.length} found`;
-    // The sheet explains tap-first-then-last, but nobody reads the sheet. Say it
-    // on the board until they have done it once.
-    if (game.found.length === 0) return `${progress} · tap a word's first and last letter`;
-    return progress;
+    // The count lives in the status strip now. The sheet explains
+    // tap-first-then-last, but nobody reads the sheet -- say it on the board
+    // until they have done it once.
+    if (game.found.length === 0) return "Tap a word's first and last letter";
+    return '';
   },
 
   outcomeContent(game) {
@@ -460,6 +463,21 @@ export const search = {
       body: game.placed.map((entry) => entry.word.toUpperCase()).join(', '),
       caption: `${game.placed.length} words`,
     };
+  },
+
+  /** The status strip: words found. */
+  progress(game) {
+    return {
+      label: `${game.found.length} of ${game.placed.length} found`,
+      value: game.found.length,
+      max: game.placed.length,
+      note: '',
+    };
+  },
+
+  /** The words are the puzzle, so the card carries only the count and time. */
+  shareLines(game) {
+    return [`All ${game.placed.length} words found \u00b7 ${formatTime(game.elapsedMs)}`];
   },
 
   statusFor(snapshot, { difficultyLabel }) {

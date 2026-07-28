@@ -6,8 +6,8 @@
   "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#12141c",
-  "theme_color": "#12141c",
+  "background_color": "#150f26",
+  "theme_color": "#150f26",
   "categories": ["games", "puzzle"],
   "icons": [
     {

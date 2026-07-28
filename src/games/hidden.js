@@ -73,6 +73,8 @@ export const hidden = {
   name: 'Hidden Quote',
   blurb: 'Call the letters. Wrong ones cost you.',
   category: 'Quotes',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'magenta',
   // Blanks with one letter standing in them: the board part way through.
   icon: `<svg viewBox="0 0 512 512">
       <rect x="56" y="300" width="88" height="22" rx="11" />
@@ -257,6 +259,19 @@ export const hidden = {
       }
       game.shownMisses = spent;
     }
+
+    // A called letter ripples through every copy of itself, nearest first.
+    if (game.justSet) {
+      const { code, at } = game.justSet;
+      game.justSet = null;
+      game.cells.forEach((el, i) => {
+        if (!el || el.dataset.key !== code) return;
+        el.style.setProperty('--rip', `${Math.min(Math.abs(i - at) * 16, 480)}ms`);
+        el.classList.remove('is-pop');
+        void el.offsetWidth;
+        el.classList.add('is-pop');
+      });
+    }
   },
 
   paintKeys(game, keys) {
@@ -283,6 +298,9 @@ export const hidden = {
     game.called.push(key);
     if (game.present.has(key)) {
       const count = [...game.plain].filter((ch) => ch === key).length;
+      // Every copy appearing at once is this game's whole payoff; the ripple
+      // makes it visible, staggered outward from the first copy.
+      game.justSet = { code: key, at: game.plain.indexOf(key) };
       return { toast: count === 1 ? `One ${key}` : `${count} of them` };
     }
 
@@ -332,9 +350,10 @@ export const hidden = {
   },
 
   caption(game) {
+    // While playing, the status strip carries the counts; the caption stays
+    // clear for the author reveal.
     if (game.solved || game.lost) return game.author ? `— ${game.author}` : '';
-    const left = [...game.present].filter((ch) => !game.called.includes(ch)).length;
-    return `${left} letter${left === 1 ? '' : 's'} left to find`;
+    return '';
   },
 
   outcomeContent(game) {
@@ -352,6 +371,25 @@ export const hidden = {
       body: game.original,
       caption: game.author ? `— ${game.author}` : '',
     };
+  },
+
+  /** The status strip: letters found, and the lives that finding them costs. */
+  progress(game) {
+    const found = [...game.present].filter((ch) => game.called.includes(ch)).length;
+    return {
+      label: `${found} of ${game.present.size} letters`,
+      value: found,
+      max: game.present.size,
+      note: `${Math.max(0, game.lives - game.misses.length)} of ${game.lives} lives`,
+    };
+  },
+
+  /** Lives as hearts, which is the whole story of this game, and no quote. */
+  shareLines(game) {
+    const spent = game.misses.length;
+    const pips = '\u2764\ufe0f'.repeat(Math.max(0, game.lives - spent)) + '\ud83d\udda4'.repeat(spent);
+    if (game.misses.length >= game.lives) return ['Out of lives', pips];
+    return [pips, `Solved in ${formatTime(game.elapsedMs)}`];
   },
 
   /**

@@ -254,6 +254,8 @@ export const boxed = {
   name: 'Boxed',
   blurb: 'Twelve letters on four sides. Use every one.',
   category: 'Letters',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'amber',
   // The four rails themselves: a square drawn as four separate bars, with the
   // corners left open because no letter sits on a corner.
   //
@@ -573,9 +575,10 @@ export const boxed = {
   },
 
   caption(game) {
+    // While playing, the status strip carries the letter and word counts.
     if (game.solved) return `${game.words.length} word${game.words.length === 1 ? '' : 's'}`;
     if (game.lost) return 'Out of words';
-    return `${game.covered.size} of ${BOX_LETTERS} letters · ${game.words.length} of ${game.limit} words`;
+    return '';
   },
 
   outcomeContent(game) {
@@ -593,6 +596,27 @@ export const boxed = {
       body: pair,
       caption: 'That pair covers all twelve.',
     };
+  },
+
+  /** The status strip: letters covered is the goal; words spent is the budget. */
+  progress(game) {
+    return {
+      label: `${game.covered.size} of ${BOX_LETTERS} letters`,
+      value: game.covered.size,
+      max: BOX_LETTERS,
+      note: `${game.words.length} of ${game.limit} words`,
+    };
+  },
+
+  /** Counts only; the chain itself would spoil the junctions. */
+  shareLines(game) {
+    if (game.covered.size >= BOX_LETTERS) {
+      return [
+        `Solved in ${game.words.length} of ${game.limit} words`,
+        `All ${BOX_LETTERS} letters \u2705`,
+      ];
+    }
+    return [`Out of words \u00b7 ${game.covered.size} of ${BOX_LETTERS} letters`];
   },
 
   /**

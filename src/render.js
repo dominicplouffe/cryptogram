@@ -190,21 +190,27 @@ export function paintKeyboard(keys, states) {
 }
 
 /**
- * Scatter confetti chips into the win sheet. Rebuilt each win so the animation
- * restarts; capped at a small count because this runs on a phone.
+ * Scatter falling letters into the win sheet -- letterforms, not squares,
+ * because this is a word game and the confetti should be unmistakably its own.
+ * Tinted with the game's hue plus the two celebratory semantics. Rebuilt each
+ * win so the animation restarts; capped at a small count because this runs on
+ * a phone.
  * @param {HTMLElement} host
  */
 export function burstConfetti(host) {
   host.textContent = '';
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  const colors = ['#7aa2f7', '#7dcfa0', '#e0af68', '#f7768e', '#bb9af7'];
-  for (let i = 0; i < 40; i++) {
+  const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const colors = ['var(--game)', 'var(--locked)', 'var(--warn)'];
+  for (let i = 0; i < 26; i++) {
     const chip = document.createElement('i');
+    chip.textContent = glyphs[Math.floor(Math.random() * glyphs.length)];
     chip.style.left = `${Math.random() * 100}%`;
-    chip.style.background = colors[i % colors.length];
+    chip.style.color = colors[i % colors.length];
+    chip.style.fontSize = `${12 + Math.random() * 10}px`;
     chip.style.animationDelay = `${Math.random() * 0.5}s`;
-    chip.style.animationDuration = `${1.1 + Math.random() * 0.8}s`;
+    chip.style.animationDuration = `${1.2 + Math.random() * 0.9}s`;
     host.appendChild(chip);
   }
 }

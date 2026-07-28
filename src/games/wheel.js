@@ -133,6 +133,8 @@ export const wheel = {
   name: 'Word Wheel',
   blurb: 'Nine letters. How many words can you find?',
   category: 'Letters',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'violet',
   // A ring of dots around a filled centre: the compulsory letter in the middle.
   icon: `<svg viewBox="0 0 512 512">
       <circle cx="256" cy="256" r="66" />
@@ -255,15 +257,16 @@ export const wheel = {
     const input = document.createElement('div');
     input.className = 'wheel-input';
 
-    // The outer letters, then the compulsory one on its own below. One instance
-    // of the centre is taken out of the ring rather than all of them: a wheel
-    // holding two Es really does let you use two.
+    // A wheel drawn as one: the outer letters sit on a circle around the
+    // compulsory centre. One instance of the centre is taken out of the ring
+    // rather than all of them: a wheel holding two Es really does let you use
+    // two. Purely presentation -- data-index still maps to game.letters and the
+    // rules never moved.
     const ring = document.createElement('div');
     ring.className = 'wheel-ring';
 
     const outer = [...game.letters];
     outer.splice(outer.indexOf(game.centre), 1);
-    ring.style.setProperty('--wheel-cols', String(Math.ceil(outer.length / 2)));
 
     const addKey = (ch, index, className) => {
       const tile = document.createElement('button');
@@ -276,23 +279,24 @@ export const wheel = {
 
     // data-index is the position in game.letters, which is what onSelect reads.
     const used = new Set([game.letters.indexOf(game.centre)]);
-    for (const ch of outer) {
+    outer.forEach((ch, spoke) => {
       let at = game.letters.indexOf(ch);
       while (used.has(at)) at = game.letters.indexOf(ch, at + 1);
       used.add(at);
-      ring.appendChild(addKey(ch, at, 'wheel-key'));
-    }
+      const tile = addKey(ch, at, 'wheel-key');
+      // Twelve o'clock first, then clockwise, however many letters there are.
+      tile.style.setProperty('--ang', `${(360 / outer.length) * spoke - 90}deg`);
+      ring.appendChild(tile);
+    });
 
-    const hub = document.createElement('div');
-    hub.className = 'wheel-hub';
-    hub.appendChild(
+    ring.appendChild(
       addKey(game.centre, game.letters.indexOf(game.centre), 'wheel-key is-centre')
     );
 
     const list = document.createElement('ul');
     list.className = 'wheel-found';
 
-    board.append(input, ring, hub, list);
+    board.append(input, ring, list);
     root.appendChild(board);
 
     game.board = board;
@@ -415,9 +419,10 @@ export const wheel = {
   },
 
   caption(game) {
+    // The counts live in the status strip; the caption carries only the rank
+    // you have earned, which the strip has no room to celebrate.
     const tier = tierFor(game.found.length, game.target);
-    const base = `${game.found.length} of ${game.solutions.length} found`;
-    return tier ? `${base} · ${tier}` : `${base} · ${game.target} for a win`;
+    return tier ? `${tier} · ${game.found.length} of ${game.solutions.length} found` : '';
   },
 
   outcomeContent(game) {
@@ -433,6 +438,25 @@ export const wheel = {
         .join(', '),
       caption: `${game.found.length} of ${game.solutions.length} words. Keep going if you like.`,
     };
+  },
+
+  /** The status strip: the winning meter, not the completionist one. */
+  progress(game) {
+    return {
+      label: `${game.found.length} of ${game.target} to win`,
+      value: Math.min(game.found.length, game.target),
+      max: game.target,
+      note: `${game.solutions.length} in there`,
+    };
+  },
+
+  /** Counts only -- naming any word would hand it to the next player. */
+  shareLines(game) {
+    const lines = [`${game.found.length} of ${game.solutions.length} words \u00b7 target ${game.target} \u2713`];
+    if (game.found.some((w) => w.length === game.letters.length)) {
+      lines.push('Pangram found \ud83c\udf89');
+    }
+    return lines;
   },
 
   /**

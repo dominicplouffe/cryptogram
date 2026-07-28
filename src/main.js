@@ -3,7 +3,7 @@
 // Knows nothing about any game's rules. Everything game-specific comes from the
 // modules in src/games/, via the registry.
 
-import { localDateKey } from './cipher.js';
+import { hashString, localDateKey } from './cipher.js';
 import { validateQuotes } from './quotes.js';
 import {
   CATEGORIES,
@@ -13,8 +13,10 @@ import {
   gameById,
 } from './games/registry.js';
 import { buildKeyboard, burstConfetti } from './render.js';
+import { setHapticsEnabled, setSoundEnabled, sfx } from './sound.js';
 import {
   clearProgress,
+  dailyNumber,
   effectiveStreak,
   formatCountdown,
   formatTime,
@@ -44,13 +46,19 @@ const dom = {
   homeDate: $('home-date'),
   chips: $('chips'),
 
-  // Today holds a row per daily still to play; Games holds every game, always.
+  // Today holds the hero card and a row per remaining daily; Games holds every
+  // game, always, as a tile grid.
+  heroCard: $('hero-card'),
   listToday: $('list-today'),
   listGames: $('list-games'),
   todayDone: $('today-done'),
 
   puzzle: $('puzzle'),
   caption: $('caption'),
+  strip: $('status-strip'),
+  stripLabel: $('strip-label'),
+  stripFill: $('strip-fill'),
+  stripNote: $('strip-note'),
   stage: document.querySelector('.stage'),
   keyboard: $('keyboard'),
   toolbar: $('toolbar'),
@@ -169,6 +177,14 @@ function settingsFor(mod) {
 }
 
 /**
+ * Paint an element with a game's identity hue. Everything downstream reads
+ * var(--game); no component ever learns the palette.
+ */
+function setGameHue(el, mod) {
+  el.style.setProperty('--game', `var(--hue-${mod.hue})`);
+}
+
+/**
  * Open a game, resuming a saved board when one matches the current settings.
  * @param {object} mod
  * @param {{fresh?: boolean, mode?: string}} options
@@ -227,6 +243,7 @@ function openGame(mod, { fresh = false, mode } = {}) {
   clearInterval(tickHandle);
   tickHandle = null;
 
+  setGameHue(dom.viewGame, mod);
   mod.mount(dom.puzzle, game);
 
   // A history entry per game entry makes the phone's back gesture return to home
@@ -264,6 +281,17 @@ function paintGame() {
   dom.caption.textContent = mod.caption(game);
   paintTimer();
 
+  // The status strip: every game computes a progress line; the strip gives it
+  // a fixed home and a bar in the game's colour.
+  const progress = mod.progress ? mod.progress(game) : null;
+  dom.strip.hidden = !progress;
+  if (progress) {
+    dom.stripLabel.textContent = progress.label;
+    dom.stripNote.textContent = progress.note ?? '';
+    const pct = progress.max > 0 ? Math.min(100, (progress.value / progress.max) * 100) : 0;
+    dom.stripFill.style.width = `${pct}%`;
+  }
+
   const done = game.solved || game.lost;
   for (const btn of dom.toolbar.querySelectorAll('[data-tool]')) {
     btn.disabled = done && btn.dataset.tool !== 'new';
@@ -277,6 +305,10 @@ function paintGame() {
 function afterMove(result = {}) {
   if (!active) return;
   if (result.toast) toast(result.toast);
+
+  // Every rejection path in every game sets clearAfter (a shake, a miss flash,
+  // wrong letters from Check), so it doubles as the wrong-answer cue.
+  if (result.clearAfter && !active.game.solved && !active.game.lost) sfx.wrong();
 
   paintGame();
   persist();
@@ -305,6 +337,9 @@ function settleOutcome() {
   game.selectedIndex = null;
 
   let global = loadGlobal();
+  // Read before recording, so the sheet can count the streak up rather than
+  // just stating it -- the number rising is the actual reward.
+  const streakBefore = effectiveStreak(global);
   if (won) {
     game.solved = true;
     ({ global } = recordSolve(mod.id, {
@@ -319,24 +354,94 @@ function settleOutcome() {
     recordLoss(mod.id);
   }
 
+  if (won) sfx.solve(mod.id);
+  else sfx.lose();
+
   paintGame();
   persist();
-  showOutcome(won, global);
+  showOutcome(won, global, streakBefore);
 }
 
-function showOutcome(won, global) {
+/** The daily the win sheet should point at next, or null once Today is done. */
+function nextDaily(excludeId) {
+  const today = localDateKey();
+  for (const mod of GAMES) {
+    if (mod.id === excludeId) continue;
+    const status = todayStatus(mod, today);
+    if (status.state === 'new' || status.state === 'progress') return mod;
+  }
+  return null;
+}
+
+/** Where the win sheet's primary button goes; null means free-play the same game. */
+let winNextTarget = null;
+
+/**
+ * The quote is the prize, so it arrives like one: word by word on a short
+ * stagger rather than all at once. Reduced motion collapses the delays.
+ */
+function paintWinBody(text) {
+  const body = $('win-body');
+  body.textContent = '';
+  const words = String(text).split(' ');
+  words.forEach((word, n) => {
+    const span = document.createElement('span');
+    span.className = 'win-word';
+    span.textContent = word;
+    span.style.animationDelay = `${Math.min(n * 45, 1400)}ms`;
+    body.appendChild(span);
+    if (n < words.length - 1) body.appendChild(document.createTextNode(' '));
+  });
+}
+
+/** Count the streak stat up by one, with a tick, when this solve advanced it. */
+function paintWinStreak(before, after) {
+  const el = $('win-streak');
+  el.classList.remove('tick');
+  if (after <= before || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = String(after);
+    return;
+  }
+  el.textContent = String(before);
+  setTimeout(() => {
+    el.textContent = String(after);
+    void el.offsetWidth;
+    el.classList.add('tick');
+    sfx.streak();
+  }, 700);
+}
+
+/** The spoiler-free share card: a header the shell owns, lines the module owns. */
+function shareText() {
+  const { mod, game } = active;
+  const head =
+    game.mode === 'daily'
+      ? `${mod.name} #${dailyNumber(game.dateKey)}`
+      : `${mod.name} · Free play`;
+  return [head, ...mod.shareLines(game)].join('\n');
+}
+
+function showOutcome(won, global, streakBefore = 0) {
   const { mod, game, settings } = active;
   const content = mod.outcomeContent(game);
+  setGameHue(dom.dlgWin, mod);
+
+  const hints = game.hintsUsed ?? 0;
+  const modeLabel = game.mode === 'daily' ? 'Daily' : 'Free play';
+  $('win-badge').textContent = won
+    ? `${modeLabel} solved · ${hints === 0 ? 'no hints' : `${hints} hint${hints === 1 ? '' : 's'}`}`
+    : modeLabel;
 
   $('win-title').textContent = content.title;
-  $('win-body').textContent = content.body;
+  paintWinBody(content.body);
   $('win-caption').textContent = content.caption ?? '';
   $('win-time').textContent = formatTime(game.elapsedMs);
-  $('win-hints').textContent = String(game.hintsUsed ?? 0);
-  $('win-streak').textContent = String(effectiveStreak(global));
 
   const stats = loadStats(mod.id);
   const band = settings.difficulty ?? 'default';
+  $('win-best').textContent = bestTime(stats, band);
+  paintWinStreak(streakBefore, effectiveStreak(global));
+
   let note = '';
   if (!won) {
     note = '';
@@ -344,7 +449,7 @@ function showOutcome(won, global) {
     // Without this, a run of free-play solves looks like a broken streak counter
     // rather than a counter measuring something else.
     note = 'Free play. Solve a Daily to build your streak.';
-  } else if ((game.hintsUsed ?? 0) > 0) {
+  } else if (hints > 0) {
     note = 'Best times only count hint-free solves.';
   } else if (stats.bestTimes[band] === game.elapsedMs) {
     note = mod.difficulties
@@ -352,6 +457,15 @@ function showOutcome(won, global) {
       : 'New best time!';
   }
   $('win-note').textContent = note;
+
+  $('share-preview').textContent = shareText();
+
+  // Chain the dailies: after a daily, the strongest button leads to the next
+  // unplayed one -- "Play again" starts free play, which never advances the
+  // streak, so it only appears once Today is empty. A loss gets the same
+  // pointer; the player who lost is the one most in need of a next thing.
+  winNextTarget = game.mode === 'daily' ? nextDaily(mod.id) : null;
+  $('btn-win-next').textContent = winNextTarget ? `Next: ${winNextTarget.name}` : 'Play again';
 
   dom.dlgWin.classList.toggle('sheet-loss', !won);
   openDialog(dom.dlgWin);
@@ -426,11 +540,12 @@ function isUntried(mod) {
   return loadStats(mod.id).played === 0;
 }
 
-/** One row of markup, used for both sections. */
+/** A Today row: the whole row plays, the action text says what playing means. */
 function buildRow(mod) {
   const row = document.createElement('li');
   row.className = 'game-row';
   row.dataset.game = mod.id;
+  setGameHue(row, mod);
   row.innerHTML = `
     <button class="row-main" data-role="open" type="button">
       <span class="row-mark" aria-hidden="true">${mod.icon}</span>
@@ -439,18 +554,37 @@ function buildRow(mod) {
         <span class="row-status" data-role="status"></span>
       </span>
       <span class="row-action" data-role="action"></span>
-    </button>
-    <button class="row-more" data-role="more" type="button" aria-label="${mod.name} details">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="5" cy="12" r="1.9" />
-        <circle cx="12" cy="12" r="1.9" />
-        <circle cx="19" cy="12" r="1.9" />
-      </svg>
     </button>`;
   return row;
 }
 
-/** Build both row pools. Adding a game needs no HTML change. */
+/**
+ * A library tile: tinted with the game's hue, tap to play, corner button for
+ * the sheet. Two columns of these halve the scroll the old rows needed, and the
+ * different shape is what makes Today and the library read as two things.
+ */
+function buildTile(mod) {
+  const tile = document.createElement('li');
+  tile.className = 'game-tile';
+  tile.dataset.game = mod.id;
+  setGameHue(tile, mod);
+  tile.innerHTML = `
+    <button class="tile-main" data-role="open" type="button">
+      <span class="row-mark" aria-hidden="true">${mod.icon}</span>
+      <span class="tile-name">${mod.name}</span>
+      <span class="tile-rec" data-role="status"></span>
+    </button>
+    <button class="tile-info" data-role="more" type="button" aria-label="${mod.name} rules and record">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.6" fill="none" />
+        <path d="M12 11.2v4.6" />
+        <path d="M12 8.2v.01" />
+      </svg>
+    </button>`;
+  return tile;
+}
+
+/** Build both pools. Adding a game needs no HTML change. */
 function buildHome() {
   buildChips();
   todayRowEls.clear();
@@ -458,12 +592,7 @@ function buildHome() {
 
   for (const mod of GAMES) {
     todayRowEls.set(mod.id, buildRow(mod));
-
-    // The Games row never changes its label: in this section a tap always means
-    // "start a fresh puzzle", whatever today's daily has done.
-    const gameRow = buildRow(mod);
-    gameRow.querySelector('[data-role="action"]').textContent = 'New puzzle';
-    gameRowEls.set(mod.id, gameRow);
+    gameRowEls.set(mod.id, buildTile(mod));
   }
 }
 
@@ -522,31 +651,35 @@ function paintHome() {
 
   const entries = GAMES.map((mod) => ({ mod, status: todayStatus(mod, today) }));
 
-  // --- Today: a row per daily still to play -------------------------------
+  // --- Today: the hero card, then a row per remaining daily ----------------
   // 'lost' counts as finished. Fiver can run out of guesses, and offering it
   // again under "Today" would imply a second attempt that does not exist.
   const pending = entries.filter(({ status }) => status.state === 'new' || status.state === 'progress');
   const solvedToday = entries.filter(({ status }) => status.state === 'solved').length;
 
+  const hero = pickHero(pending, today);
+  paintHero(hero);
+
   dom.listToday.textContent = '';
   for (const { mod, status } of pending) {
+    if (hero && mod.id === hero.mod.id) continue; // the hero card IS this row
     const row = todayRowEls.get(mod.id);
     paintRowStatus(row, status.text, status.state);
     row.querySelector('[data-role="action"]').textContent = status.action;
     dom.listToday.appendChild(row);
   }
 
-  paintDots(entries.map(({ status }) => status.state));
+  paintDots(entries);
   $('today-count').textContent = `${solvedToday} of ${GAMES.length} done`;
   paintTodayDone(pending.length, solvedToday, streak);
 
-  // --- Games: every game, every time --------------------------------------
+  // --- Games: every game, every time, as tiles -----------------------------
   dom.listGames.textContent = '';
   for (const { mod } of entries) {
     if (filter !== 'all' && mod.category !== filter) continue;
-    const row = gameRowEls.get(mod.id);
-    paintRowStatus(row, recordLine(mod), 'record');
-    dom.listGames.appendChild(row);
+    const tile = gameRowEls.get(mod.id);
+    paintRowStatus(tile, recordLine(mod), 'record');
+    dom.listGames.appendChild(tile);
   }
 
   paintChips();
@@ -566,15 +699,54 @@ function paintRowStatus(row, text, state) {
 }
 
 /**
- * One dot per game, whatever the Games list is filtered to: the meter reports
- * the day, not the current view.
+ * The day's featured game: rotates by date so the spotlight moves around the
+ * library, but always lands on a daily still to play. Null once Today is done.
  */
-function paintDots(states) {
+function pickHero(pending, today) {
+  if (pending.length === 0) return null;
+  const rot = hashString(`hero|${today}`) % GAMES.length;
+  for (let i = 0; i < GAMES.length; i++) {
+    const mod = GAMES[(rot + i) % GAMES.length];
+    const hit = pending.find((entry) => entry.mod.id === mod.id);
+    if (hit) return hit;
+  }
+  return pending[0];
+}
+
+/** The one card the screen leads with. A decorative mark, never a live board. */
+function paintHero(entry) {
+  dom.heroCard.hidden = !entry;
+  if (!entry) return;
+
+  const { mod, status } = entry;
+  dom.heroCard.dataset.game = mod.id;
+  setGameHue(dom.heroCard, mod);
+  dom.heroCard.innerHTML = `
+    <button class="hero-main" data-role="open" type="button">
+      <span class="hero-kicker">Today's puzzle</span>
+      <span class="hero-name">${mod.name}</span>
+      <span class="hero-blurb">${mod.blurb}</span>
+      <span class="hero-foot">
+        <span class="hero-mark" aria-hidden="true">${mod.icon}</span>
+        <span class="hero-meta">${status.text}</span>
+        <span class="hero-cta">${status.action}</span>
+      </span>
+    </button>`;
+}
+
+/**
+ * One pip per game in that game's own colour, whatever the Games list is
+ * filtered to: the meter reports the day, not the current view. Hollow, part
+ * filled or solid -- a shape difference as well as a fill, because eight hues
+ * at eleven pixels is exactly where colour vision stops being enough.
+ */
+function paintDots(entries) {
   const dots = $('today-dots');
   dots.textContent = '';
-  for (const state of states) {
+  for (const { mod, status } of entries) {
     const dot = document.createElement('li');
-    if (state !== 'new') dot.className = `is-${state}`;
+    if (status.state !== 'new') dot.className = `is-${status.state}`;
+    setGameHue(dot, mod);
     dots.appendChild(dot);
   }
 }
@@ -643,6 +815,7 @@ function paintChips() {
 
 function openGameSheet(mod) {
   sheetGame = mod;
+  setGameHue(dom.dlgGame, mod);
   paintGameSheet();
   openDialog(dom.dlgGame);
 }
@@ -762,6 +935,18 @@ function paintSettings() {
   for (const btn of $('seg-theme').querySelectorAll('.seg')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.theme === appSettings.theme));
   }
+  for (const btn of $('seg-sound').querySelectorAll('.seg')) {
+    btn.setAttribute('aria-pressed', String((btn.dataset.sound === 'on') === appSettings.sound));
+  }
+  for (const btn of $('seg-haptics').querySelectorAll('.seg')) {
+    btn.setAttribute('aria-pressed', String((btn.dataset.haptics === 'on') === appSettings.haptics));
+  }
+}
+
+/** Push the persisted feedback switches into the sound module. */
+function applyFeedbackSettings() {
+  setSoundEnabled(appSettings.sound);
+  setHapticsEnabled(appSettings.haptics);
 }
 
 // --- misc shell -------------------------------------------------------------
@@ -794,19 +979,27 @@ function wireEvents() {
     const cell = event.target.closest('[data-index]');
     if (!cell || !active || active.game.solved || active.game.lost) return;
 
+    sfx.tap();
     const result = active.mod.onSelect(active.game, Number(cell.dataset.index));
 
     // Selecting a cell can finish a board -- in Word Search the second tap of a
     // pair completes a word, and the last word wins. A module says so by
     // returning a move result; the games where a tap only moves a cursor return
     // nothing and are repainted without a save or an outcome check.
-    if (result) afterMove(result);
-    else paintGame();
+    if (result) {
+      // A toast with no clearAfter from a board tap is a success -- in Word
+      // Search, a found word -- and earns the two-note chime.
+      if (result.toast && !result.clearAfter) sfx.word();
+      afterMove(result);
+    } else {
+      paintGame();
+    }
   });
 
   dom.keyboard.addEventListener('click', (event) => {
     const key = event.target.closest('.key');
     if (!key || !active) return;
+    sfx.tap();
     afterMove(active.mod.onKey(active.game, key.dataset.key));
   });
 
@@ -842,13 +1035,40 @@ function wireEvents() {
   });
   $('btn-win-next').addEventListener('click', () => {
     dom.dlgWin.close();
-    startFresh(active.mod, 'free');
+    if (winNextTarget) {
+      // An untried game still shows its rules first, even from here.
+      if (isUntried(winNextTarget)) openGameSheet(winNextTarget);
+      else openGame(winNextTarget, { mode: 'daily' });
+    } else {
+      startFresh(active.mod, 'free');
+    }
   });
 
-  // Home rows: the row plays, the dots button opens the game's sheet. Which
-  // section the row sits in decides what "plays" means.
+  $('btn-win-share').addEventListener('click', async () => {
+    const text = $('share-preview').textContent;
+    // navigator.share needs a user gesture and https; the clipboard is the
+    // fallback everywhere else, including desktop.
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+    } catch {
+      return; // the user closed the share tray; not an error
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Copied to clipboard');
+    } catch {
+      toast('Could not copy');
+    }
+  });
+
+  // Home: the hero card, a Today row and a library tile all carry data-game.
+  // The main surface plays; a tile's corner button opens the game's sheet.
+  // Which section the element sits in decides what "plays" means.
   dom.viewHome.addEventListener('click', (event) => {
-    const row = event.target.closest('.game-row');
+    const row = event.target.closest('[data-game]');
     if (!row) return;
     const mod = gameById(row.dataset.game);
     if (!mod) return;
@@ -923,6 +1143,26 @@ function wireEvents() {
     paintSettings();
   });
 
+  $('seg-sound').addEventListener('click', (event) => {
+    const btn = event.target.closest('.seg');
+    if (!btn) return;
+    appSettings.sound = btn.dataset.sound === 'on';
+    saveAppSettings(appSettings);
+    applyFeedbackSettings();
+    paintSettings();
+    // Confirmation you can hear, inside the enabling gesture.
+    if (appSettings.sound) sfx.word();
+  });
+
+  $('seg-haptics').addEventListener('click', (event) => {
+    const btn = event.target.closest('.seg');
+    if (!btn) return;
+    appSettings.haptics = btn.dataset.haptics === 'on';
+    saveAppSettings(appSettings);
+    applyFeedbackSettings();
+    paintSettings();
+  });
+
   $('btn-reset-stats').addEventListener('click', () => {
     if (!window.confirm('Reset all statistics for every game? This cannot be undone.')) return;
     resetAllStats(GAME_IDS);
@@ -951,12 +1191,15 @@ function wireEvents() {
 
     if (/^[a-zA-Z]$/.test(event.key)) {
       event.preventDefault();
+      sfx.tap();
       afterMove(mod.onKey(game, event.key.toUpperCase()));
     } else if (event.key === 'Backspace' || event.key === 'Delete') {
       event.preventDefault();
+      sfx.tap();
       afterMove(mod.onKey(game, 'DEL'));
     } else if (event.key === 'Enter') {
       event.preventDefault();
+      sfx.tap();
       afterMove(mod.onKey(game, 'ENTER'));
     } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
       event.preventDefault();
@@ -993,6 +1236,7 @@ function boot() {
   migrateLegacy();
   appSettings = loadAppSettings();
   applyTheme();
+  applyFeedbackSettings();
   pruneOldProgress();
 
   buildHome();

@@ -78,6 +78,8 @@ export const fiver = {
   name: 'Fiver',
   blurb: 'Find the five-letter word in six guesses.',
   category: 'Guessing',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'mint',
   icon: `<svg viewBox="0 0 512 512">
       <rect x="52" y="112" width="118" height="118" rx="20" />
       <rect x="197" y="112" width="118" height="118" rx="20" class="dim" />
@@ -299,6 +301,27 @@ export const fiver = {
       body: game.answer.toUpperCase(),
       caption: 'That was the word.',
     };
+  },
+
+  /** The status strip: guesses spent. */
+  progress(game) {
+    return {
+      label: `${game.rows.length} of ${MAX_ROWS} guesses`,
+      value: game.rows.length,
+      max: MAX_ROWS,
+      note: '',
+    };
+  },
+
+  /** The classic spoiler-free grid: one emoji row per guess. */
+  shareLines(game) {
+    const rows = game.rows.map((row) =>
+      scoreGuess(row, game.answer)
+        .map((s) => (s === 'hit' ? '\ud83d\udfe9' : s === 'near' ? '\ud83d\udfe8' : '\u2b1b'))
+        .join('')
+    );
+    const won = game.rows.includes(game.answer);
+    return [`${won ? game.rows.length : 'X'}/${MAX_ROWS}`, ...rows];
   },
 
   statusFor(snapshot) {

@@ -230,6 +230,8 @@ export const ladder = {
   name: 'Word Ladder',
   blurb: 'Change one letter at a time.',
   category: 'Letters',
+  // The identity hue the shell paints this game with; see --hue-* in styles.css.
+  hue: 'cyan',
   // Three bars stepping upward. Deliberately unlike the other three marks, which
   // are all blocks or circles in a row.
   icon: `<svg viewBox="0 0 512 512">
@@ -514,11 +516,10 @@ export const ladder = {
   },
 
   caption(game) {
+    // While playing, the status strip carries steps and par.
     const steps = game.rungs.length;
     if (game.solved) return `${steps} step${steps === 1 ? '' : 's'} · par ${game.par}`;
-    return steps === 0
-      ? `Par ${game.par}`
-      : `${steps} step${steps === 1 ? '' : 's'} · par ${game.par}`;
+    return '';
   },
 
   outcomeContent(game) {
@@ -530,6 +531,30 @@ export const ladder = {
       body: chain,
       caption: `${steps} step${steps === 1 ? '' : 's'} · par ${game.par}`,
     };
+  },
+
+  /** The status strip: steps taken against par. The bar caps at par. */
+  progress(game) {
+    const steps = game.rungs.length;
+    return {
+      label: `${steps} step${steps === 1 ? '' : 's'}`,
+      value: Math.min(steps, game.par),
+      max: game.par,
+      note: `par ${game.par}`,
+    };
+  },
+
+  /**
+   * Both endpoint words are public from the first moment, so naming them
+   * spoils nothing; the route stays private.
+   */
+  shareLines(game) {
+    const steps = game.rungs.length;
+    const par = `${steps} step${steps === 1 ? '' : 's'} \u00b7 par ${game.par}`;
+    return [
+      `${game.start.toUpperCase()} \u2192 ${game.goal.toUpperCase()}`,
+      steps <= game.par && game.hintsUsed === 0 ? `${par} \ud83c\udfaf` : par,
+    ];
   },
 
   /**

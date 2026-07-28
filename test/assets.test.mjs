@@ -30,6 +30,27 @@ test('the service worker precaches every top-level source module', () => {
   }
 });
 
+test('every font styles.css references is on disk and precached', () => {
+  // The faces are part of the identity: online they lazy-load, but a cold
+  // offline start with one missing renders the whole app in fallback.
+  const css = read('styles.css');
+  const refs = [...css.matchAll(/url\('(fonts\/[a-z0-9-]+\.woff2)'\)/g)].map((m) => m[1]);
+
+  assert.ok(refs.length >= 2, 'expected styles.css to reference the self-hosted fonts');
+  for (const ref of refs) {
+    assert.ok(sw.includes(ref), `sw.js does not precache ${ref}`);
+    assert.ok(
+      readFileSync(new URL(ref, root)).length > 1000,
+      `${ref} is missing or truncated`
+    );
+  }
+
+  // And the reverse: nothing precached that no longer exists in the stylesheet.
+  for (const line of sw.match(/fonts\/[a-z0-9-]+\.woff2/g) ?? []) {
+    assert.ok(refs.includes(line), `sw.js precaches ${line} but styles.css never uses it`);
+  }
+});
+
 test('every element the shell looks up exists in the markup', () => {
   // main.js reads its elements by id at load time, so a renamed id in one file
   // and not the other is a blank screen rather than a caught error.
