@@ -12,7 +12,9 @@ import { search } from '../src/games/search.js';
 import { wheel, solutionsFor, targetFor } from '../src/games/wheel.js';
 import { boxed, BOX_LETTERS, MIN_WORD as BOX_MIN, rejectionFor } from '../src/games/boxed.js';
 import { hidden, lettersIn, livesFor } from '../src/games/hidden.js';
-import { LADDER_COMMON, LADDER_WORDS, WORDS } from '../src/words.js';
+import {
+  ANSWERS, LADDER_COMMON, LADDER_WORDS, SEARCH_WORDS, WHEEL_SOURCES, WORDS,
+} from '../src/words.js';
 import { QUOTES } from '../src/quotes.js';
 import { distinctLetters } from '../src/cipher.js';
 
@@ -783,6 +785,47 @@ test('a grid never spells something offensive by accident', () => {
   }
 });
 
+test('no shown pool contains a word the games only accept', () => {
+  // The "accept but never show" list in tools/make-words.mjs is about tone, and
+  // it applies to the four pools a game draws a board FROM -- never to what it
+  // will take from the keyboard.
+  //
+  // Stems, not exact words, because that was the bug: the tool matched exact
+  // forms, so SEXUALITY shipped as a Word Wheel source (the wheel is built from
+  // its source, so it was also the guaranteed best find) and SEXUALLY shipped in
+  // SEARCH_WORDS, whose word list is printed under the grid.
+  const stems = [
+    'sex', 'sexual', 'sexy', 'erotic', 'lust', 'nude', 'nudity', 'fetish',
+    'kinky', 'thong', 'bosom',
+  ];
+
+  // Ordinary English that merely starts with one of those. Kept on purpose: the
+  // list is meant to be judgement, not prudishness.
+  const allowed = new Set([
+    'luster', 'lusters', 'lustre', 'lustres', 'lustrous', 'lustrously',
+    'kink', 'kinks', 'kinked', 'kinking', 'sextet', 'sextets', 'sexton',
+    'sextons', 'nudge', 'nudged', 'nudges', 'nudging',
+  ]);
+
+  for (const [label, pool] of [
+    ['ANSWERS', ANSWERS],
+    ['LADDER_COMMON', LADDER_COMMON],
+    ['WHEEL_SOURCES', WHEEL_SOURCES],
+    ['SEARCH_WORDS', SEARCH_WORDS],
+  ]) {
+    for (const word of pool) {
+      if (allowed.has(word)) continue;
+      const hit = stems.find((stem) => word.startsWith(stem));
+      assert.ok(!hit, `${label} would show ${word.toUpperCase()} (matches ${hit})`);
+    }
+  }
+
+  // ...and the wide pool still accepts them, which is the whole point.
+  for (const word of ['sexual', 'erotic', 'kinky', 'nudity']) {
+    assert.ok(WORDS.has(word), `WORDS should still accept ${word.toUpperCase()}`);
+  }
+});
+
 test('Word Search home card counts words found', () => {
   assert.equal(search.statusFor(null, { difficultyLabel: 'Medium' }).state, 'new');
 
@@ -1152,4 +1195,53 @@ test('a saved Hidden Quote restores the same quote and the same calls', () => {
   assert.deepEqual(restored.called, game.called);
   assert.deepEqual(restored.hinted, game.hinted);
   assert.equal(restored.lives, game.lives);
+});
+
+// --- drawing from a pool by content rather than by position ------------------
+
+test('no snapshot stores a position in a word pool', () => {
+  // This is the rule that makes regenerating src/words.js safe. A stored index is
+  // a position, and positions move when a pool gains or loses a word, so a saved
+  // board rebuilt from one silently becomes a different puzzle. Every game either
+  // stores the word outright or re-derives it from the seed.
+  //
+  // quoteIndex is the deliberate exception: the quote pack is append-only by
+  // convention, documented in the README, so an index into it cannot go stale.
+  for (const mod of GAMES) {
+    const difficulty = mod.difficulties ? mod.defaultDifficulty : null;
+    const snap = mod.toSnapshot(mod.createGame({ mode: 'daily', difficulty, dateKey: '2026-08-01' }));
+
+    for (const key of Object.keys(snap)) {
+      if (key === 'quoteIndex') continue;
+      assert.ok(
+        !/index$/i.test(key),
+        `${mod.id} stores ${key}; store the word or derive it from the seed instead`
+      );
+    }
+  }
+});
+
+test('a board is a pure function of its seed and survives a legacy save', () => {
+  // Saves written before this change carry only positions. They have to keep
+  // opening -- rebuilt from the seed, which is the correct answer for them, since
+  // the position they stored has already been invalidated by a regeneration.
+  const legacy = [
+    [fiver, { mode: 'daily', difficulty: null, dateKey: '2026-08-01', answerIndex: 1234, rows: [] }],
+    [wheel, { mode: 'daily', difficulty: 'medium', dateKey: '2026-08-01', sourceIndex: 77, centre: 'x', found: [] }],
+    [ladder, { mode: 'daily', difficulty: 'medium', dateKey: '2026-08-01', startIndex: 5, goalIndex: 9, rungs: [] }],
+  ];
+
+  for (const [mod, base] of legacy) {
+    const difficulty = mod.difficulties ? mod.defaultDifficulty : null;
+    const fresh = mod.createGame({ mode: 'daily', difficulty, dateKey: '2026-08-01' });
+    const restored = mod.hydrate({ ...base, seed: fresh.seed });
+
+    // Same seed, so a legacy save must land on exactly the board a fresh build
+    // would produce rather than on whatever its stale index now points at.
+    assert.deepEqual(
+      mod.toSnapshot(restored),
+      mod.toSnapshot(fresh),
+      `${mod.id}: a legacy save did not rebuild the seed's board`
+    );
+  }
 });

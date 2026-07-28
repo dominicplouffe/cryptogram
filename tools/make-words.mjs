@@ -108,10 +108,47 @@ const PROFANE_ALLOW = new Set([
 // Kept deliberately short. BREAST, THIGH, GROIN, DRUNK and OPIUM are all
 // ordinary English that crosswords use without comment, and filtering them would
 // be prudishness rather than judgement.
-const NOT_SHOWN = new Set([
-  'sexual', 'sexy', 'erotic', 'lust', 'lusty', 'nude', 'fetish', 'kinky',
-  'thong', 'bosom',
+//
+// Expanded by suffix like PROFANE_STEMS, and for the same reason: an exact-match
+// set leaks inflections. SEXUALITY shipped as a Word Wheel source -- so the wheel
+// was built from it and it was the guaranteed best find -- and SEXUALLY shipped
+// in SEARCH_WORDS, where the word list is printed under the grid. Both are
+// precisely the case this list exists to prevent.
+const NOT_SHOWN_STEMS = [
+  'sexual', 'sexy', 'erotic', 'lust', 'nude', 'fetish', 'kinky', 'thong',
+  'bosom',
+];
+
+// Innocent words the tone expansion catches by accident. LUSTROUS and LUSTRE
+// share four letters with LUST and nothing else; they are ordinary English and
+// LUSTROUS is a good wheel source besides. A KINK in a hose is the same kind of
+// ordinary word as THIGH or DRUNK -- it is KINKY that this list is aimed at.
+const NOT_SHOWN_ALLOW = new Set([
+  'luster', 'lusters', 'lustre', 'lustres', 'lustrous', 'lustrously',
+  'kink', 'kinks', 'kinked', 'kinking',
 ]);
+
+const NOT_SHOWN = (() => {
+  const out = new Set();
+  // Wider than the profanity suffixes: this list is adjectives and nouns, so it
+  // needs -ly, -ity, -ism, -ist and the comparatives that Y-stems take.
+  const suffixes = [
+    '', 's', 'es', 'ed', 'd', 'ing', 'er', 'ers', 'y', 'ies', 'ish', 'ly',
+    'ity', 'ism', 'ist', 'ists', 'ier', 'iest', 'ily', 'iness', 'ful', 'fully',
+    'a', 'ally', 'est',
+  ];
+  for (const stem of NOT_SHOWN_STEMS) {
+    for (const suffix of suffixes) {
+      out.add(stem + suffix);
+      // sexy -> sexier, and erotic -> erotica.
+      if (stem.endsWith('y')) out.add(stem.slice(0, -1) + suffix);
+      // nude -> nudity, nudist, nudism. NUDGE survives: 'ge' is not a suffix.
+      if (stem.endsWith('e')) out.add(stem.slice(0, -1) + suffix);
+    }
+  }
+  for (const allowed of NOT_SHOWN_ALLOW) out.delete(allowed);
+  return out;
+})();
 
 const PROFANE = (() => {
   const out = new Set(PROFANE_EXTRA);
@@ -250,14 +287,46 @@ const commonAll = ofLength(commonWords, '4,9');
 
 const sortedWords = [...words].sort();
 
-// Deterministic thinning rather than the alphabetical head, so a capped pool is
-// not all A words.
+/**
+ * FNV-1a, 32-bit. A word's rank has to depend on the word and nothing else --
+ * not on its position, not on how many words came before it.
+ */
+function rankOf(word) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < word.length; i++) {
+    h ^= word.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}
+
+/**
+ * Thin a list down to `cap` by keeping the lowest-ranked words.
+ *
+ * Deterministic thinning rather than the alphabetical head, so a capped pool is
+ * not all A words -- but specifically thinning by a hash of each word rather
+ * than by striding the list.
+ *
+ * The previous version walked the list taking every (length/cap)th entry, which
+ * made every word's membership depend on how many words happened to sort before
+ * it. Removing a single word from a filter shifted every index after it and
+ * resampled the entire pool: taking two words out of the tone list churned 42%
+ * of WHEEL_SOURCES and 65% of SEARCH_WORDS and moved every Word Search daily.
+ * That made the word list effectively unmaintainable, since the four-letter
+ * blocklist is expected to keep growing.
+ *
+ * Ranking by content decouples them. Drop a word and every other word keeps the
+ * rank it had; the pool loses that one entry and admits whatever sat immediately
+ * below the cut. One word out, one word in, and nothing else moves.
+ */
 function spread(list, cap) {
   if (list.length <= cap) return list;
-  const step = list.length / cap;
-  const out = [];
-  for (let i = 0; i < cap; i++) out.push(list[Math.floor(i * step)]);
-  return out;
+  return [...list]
+    .sort((a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b))
+    .slice(0, cap)
+    // Back to alphabetical: the pools ship as readable text and a hash-ordered
+    // list makes the generated file impossible to diff by eye.
+    .sort();
 }
 
 const wheelSources = WHEEL_LENGTHS.flatMap((n) =>

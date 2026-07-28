@@ -7,7 +7,7 @@
 // and rings the bell, but the board deliberately stays live afterwards so you
 // can keep hunting -- the shell only gates the keyboard if a module chooses to.
 
-import { hashString, localDateKey, mulberry32 } from '../cipher.js';
+import { hashString, localDateKey, orderBySeed } from '../cipher.js';
 import { WHEEL_SOURCES, WORDS } from '../words.js';
 import { QWERTY_ROWS, paintKeyboard } from '../render.js';
 
@@ -88,36 +88,30 @@ export function solutionsFor(letters, centre) {
  * them, and the best find on the board would be an accident.
  */
 function generate(seed, size) {
-  const pick = mulberry32(seed);
-  const pool = WHEEL_SOURCES.filter((w) => w.length === size);
+  // Sources in a content-addressed order rather than drawn by index. Drawing by
+  // position tied every wheel to how many words happened to sort before the one
+  // it wanted, so a regenerated word list repointed saved games at other
+  // puzzles; see orderBySeed in cipher.js. A wheel is now a pure function of its
+  // seed and the pool's membership.
+  const pool = orderBySeed(
+    WHEEL_SOURCES.filter((w) => w.length === size),
+    seed
+  );
 
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const source = pool[Math.floor(pick() * pool.length)];
-
-    // The centre letter is compulsory, so it has to be one that actually leads
-    // somewhere. Trying each distinct letter keeps a dud source from being
-    // thrown away when one of its letters would have worked.
-    const distinct = [...new Set(source)];
-    const centre = distinct[Math.floor(pick() * distinct.length)];
-    const solutions = solutionsFor(source, centre);
-
-    // Too thin and the puzzle is a chore rather than a pastime.
-    if (solutions.length >= 12) {
-      const letters = [...source].sort((a, b) => a.localeCompare(b)).join('');
-      return { source, letters, centre, total: solutions.length };
-    }
-  }
-
-  // Deterministic last resort, so a puzzle always exists.
   for (const source of pool) {
-    for (const centre of new Set(source)) {
+    // Each distinct letter tried as the compulsory one, in ranked order, so a
+    // usable source is not thrown away because the first centre offered happened
+    // to lead nowhere.
+    for (const centre of orderBySeed(new Set(source), seed)) {
       const solutions = solutionsFor(source, centre);
+      // Too thin and the puzzle is a chore rather than a pastime.
       if (solutions.length >= 12) {
         const letters = [...source].sort((a, b) => a.localeCompare(b)).join('');
         return { source, letters, centre, total: solutions.length };
       }
     }
   }
+
   throw new Error('no usable wheel in the source list');
 }
 
@@ -184,7 +178,9 @@ export const wheel = {
       difficulty,
       dateKey,
       seed: resolvedSeed,
-      sourceIndex: WHEEL_SOURCES.indexOf(built.source),
+      // The source word itself, not its position in WHEEL_SOURCES. An index goes
+      // stale the moment the pool changes; the word does not.
+      source: built.source,
       centre: built.centre,
       found: [],
       hintsUsed: 0,
@@ -194,8 +190,12 @@ export const wheel = {
   },
 
   hydrate(snapshot) {
-    const source = WHEEL_SOURCES[snapshot.sourceIndex];
-    const centre = snapshot.centre;
+    // Saves written before the source word was stored carry only a sourceIndex,
+    // which a regenerated pool has already invalidated. Rebuilding from the seed
+    // is both the correct answer for those and what keeps this a pure function.
+    const rebuilt = snapshot.source ? null : generate(snapshot.seed, DIFFICULTIES[snapshot.difficulty].size);
+    const source = snapshot.source ?? rebuilt.source;
+    const centre = snapshot.source ? snapshot.centre : rebuilt.centre;
     const solutions = solutionsFor(source, centre);
     const target = targetFor(solutions.length);
 
@@ -209,7 +209,6 @@ export const wheel = {
       difficulty: snapshot.difficulty,
       dateKey: snapshot.dateKey,
       seed: snapshot.seed,
-      sourceIndex: snapshot.sourceIndex,
       centre,
       source,
       // Sorted so the wheel is not a giveaway of the source word's spelling.
@@ -236,7 +235,7 @@ export const wheel = {
       difficulty: game.difficulty,
       dateKey: game.dateKey,
       seed: game.seed,
-      sourceIndex: game.sourceIndex,
+      source: game.source,
       centre: game.centre,
       found: game.found,
       hintsUsed: game.hintsUsed,

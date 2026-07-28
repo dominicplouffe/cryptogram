@@ -212,3 +212,66 @@ export function isSolved(cipherText, guesses, solution) {
   }
   return true;
 }
+
+// --- drawing from a word pool -----------------------------------------------
+//
+// Every game that draws a puzzle from a word list used to do it by position:
+// list[Math.floor(rand() * list.length)]. That quietly ties each puzzle to how
+// many entries happen to sort before the one it wanted, which made the word
+// lists unmaintainable. Adding one word to a blocklist shifted every index after
+// it and re-rolled nearly every board: measured at 99.9% of a year of Word
+// Search dailies for a single four-letter word.
+//
+// Ranking by content instead decouples them. A pool that loses one word only
+// changes the puzzles that word was actually drawn for -- under 1% -- and a
+// board becomes a pure function of its seed and the pool's membership, so a
+// saved game can be rebuilt from its seed alone with no stored index to go
+// stale. See the word list section of the README.
+
+/**
+ * Rank an item for a seed. Depends on the seed and the item's own text, and on
+ * nothing else -- crucially not on where the item sits in any list.
+ * @param {number} seed
+ * @param {string} item
+ */
+function rankFor(seed, item) {
+  return hashString(`${seed}|${item}`);
+}
+
+/**
+ * A deterministic ordering of `items` for this seed.
+ *
+ * Use when a caller needs to try candidates in turn -- Word Search walks this
+ * looking for words it can fit, Word Ladder for a start with a ladder on it.
+ * @param {Iterable<string>} items
+ * @param {number} seed
+ * @returns {string[]}
+ */
+export function orderBySeed(items, seed) {
+  return [...items]
+    .map((item) => [rankFor(seed, item), item])
+    .sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0))
+    .map(([, item]) => item);
+}
+
+/**
+ * The one item this seed draws from `items`, or null if there are none.
+ *
+ * A single-pass minimum rather than orderBySeed(...)[0], because this runs over
+ * the whole answer pool on every board build.
+ * @param {Iterable<string>} items
+ * @param {number} seed
+ * @returns {string|null}
+ */
+export function pickBySeed(items, seed) {
+  let best = null;
+  let bestRank = Infinity;
+  for (const item of items) {
+    const rank = rankFor(seed, item);
+    if (rank < bestRank || (rank === bestRank && item < best)) {
+      best = item;
+      bestRank = rank;
+    }
+  }
+  return best;
+}

@@ -9,7 +9,7 @@
 // no deduction, just scanning -- which is deliberate. Not every puzzle has to
 // make you think hard.
 
-import { hashString, localDateKey, mulberry32 } from '../cipher.js';
+import { hashString, localDateKey, mulberry32, orderBySeed } from '../cipher.js';
 import { SEARCH_WORDS } from '../words.js';
 
 const DIFFICULTIES = {
@@ -75,39 +75,49 @@ function buildGrid(seed, { size, words: count, back }) {
   const headings = back ? HEADINGS : HEADINGS.slice(0, 4);
   const letters = new Array(size * size).fill('');
   const placed = [];
-  const used = new Set();
 
-  // Longest first: the long words are the hard ones to fit, and fitting them
-  // last is how you end up with none of them.
-  const pool = SEARCH_WORDS.filter((w) => w.length >= 4 && w.length <= size).sort(
-    (a, b) => b.length - a.length
+  // The words this seed offers, in a content-addressed order.
+  //
+  // The old loop drew a fresh word per attempt with pool[rand() * pool.length],
+  // which tied every grid to the pool's indices: adding one word to a blocklist
+  // shifted everything after it and changed 99.9% of a year of dailies. Walking
+  // an order derived from the seed and the words themselves means a pool that
+  // loses a word only changes the grids that word was actually in.
+  //
+  // Taken in that order and no other. An earlier version sorted the head of it
+  // longest-first, on the theory that long words are the hard ones to fit -- but
+  // they fit easily on a grid that is still empty, and it skewed two thirds of
+  // every board to eight-letter words. The pool's own mix of lengths is the right
+  // mix, and rank order preserves it.
+  const candidates = orderBySeed(
+    SEARCH_WORDS.filter((w) => w.length >= 4 && w.length <= size),
+    seed
   );
 
-  let guard = 0;
-  while (placed.length < count && guard < 4000) {
-    guard += 1;
+  for (const word of candidates) {
+    if (placed.length >= count) break;
 
-    const word = pickFrom(pool);
-    if (used.has(word)) continue;
+    // A handful of placements tried per word before giving up on it, since where
+    // a word can go depends on what is already down.
+    for (let tries = 0; tries < 24; tries++) {
+      const cells = pathFor(
+        word,
+        Math.floor(rand() * size),
+        Math.floor(rand() * size),
+        pickFrom(headings),
+        size
+      );
+      if (!cells) continue;
 
-    const cells = pathFor(
-      word,
-      Math.floor(rand() * size),
-      Math.floor(rand() * size),
-      pickFrom(headings),
-      size
-    );
-    if (!cells) continue;
+      // Every cell must be empty or already hold the letter we need.
+      if (cells.some((cell, i) => letters[cell] && letters[cell] !== word[i])) continue;
 
-    // Every cell must be empty or already hold the letter we need.
-    const clash = cells.some((cell, i) => letters[cell] && letters[cell] !== word[i]);
-    if (clash) continue;
-
-    cells.forEach((cell, i) => {
-      letters[cell] = word[i];
-    });
-    placed.push({ word, cells });
-    used.add(word);
+      cells.forEach((cell, i) => {
+        letters[cell] = word[i];
+      });
+      placed.push({ word, cells });
+      break;
+    }
   }
 
   // Fill the gaps. Done after placement so filler never blocks a word.

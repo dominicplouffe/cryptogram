@@ -6,7 +6,7 @@
 // five-letter words is sparse enough that most words are isolated; over four it
 // averages seven neighbours a word, which is what makes ladders exist at all.
 
-import { hashString, localDateKey, mulberry32 } from '../cipher.js';
+import { hashString, localDateKey, mulberry32, orderBySeed, pickBySeed } from '../cipher.js';
 import { LADDER_COMMON, LADDER_WORDS } from '../words.js';
 import { QWERTY_ROWS, paintKeyboard } from '../render.js';
 
@@ -111,8 +111,13 @@ function generate(seed, steps) {
   const inCommon = (word) => common.has(word);
   let fallback = null;
 
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const start = LADDER_COMMON[Math.floor(pick() * LADDER_COMMON.length)];
+  // Starts in a content-addressed order rather than drawn by index: drawing by
+  // position tied every ladder to how many words happened to sort before it, so
+  // one addition to the four-letter blocklist -- which this list expects -- moved
+  // every board. See orderBySeed in cipher.js.
+  const starts = orderBySeed(LADDER_COMMON, seed);
+
+  for (const start of starts.slice(0, 40)) {
     const reached = explore(start, inCommon);
 
     const exact = [];
@@ -125,7 +130,7 @@ function generate(seed, steps) {
     }
 
     if (exact.length) {
-      return { start, goal: exact[Math.floor(pick() * exact.length)], par: steps };
+      return { start, goal: pickBySeed(exact, seed), par: steps };
     }
     if (longest && (!fallback || longest.dist > fallback.par)) {
       fallback = { start, goal: longest.word, par: longest.dist };
@@ -265,8 +270,12 @@ export const ladder = {
       difficulty,
       dateKey,
       seed: resolvedSeed,
-      startIndex: LADDER_COMMON.indexOf(start),
-      goalIndex: LADDER_COMMON.indexOf(goal),
+      // The endpoint words themselves, not their positions in LADDER_COMMON.
+      // Both are shown to the player from the first moment, so storing them
+      // reveals nothing, and unlike an index neither goes stale when the word
+      // list is regenerated.
+      start,
+      goal,
       par,
       rungs: [],
       current: '',
@@ -277,8 +286,14 @@ export const ladder = {
   },
 
   hydrate(snapshot) {
-    const start = LADDER_COMMON[snapshot.startIndex];
-    const goal = LADDER_COMMON[snapshot.goalIndex];
+    // Saves written before the words were stored carry only positions, which a
+    // regenerated pool has already invalidated; rebuild those from the seed.
+    const legacy =
+      snapshot.start && snapshot.goal
+        ? null
+        : generate(snapshot.seed, DIFFICULTIES[snapshot.difficulty].steps);
+    const start = snapshot.start ?? legacy.start;
+    const goal = snapshot.goal ?? legacy.goal;
     const rungs = (snapshot.rungs ?? []).slice();
 
     return {
@@ -287,9 +302,7 @@ export const ladder = {
       difficulty: snapshot.difficulty,
       dateKey: snapshot.dateKey,
       seed: snapshot.seed,
-      startIndex: snapshot.startIndex,
-      goalIndex: snapshot.goalIndex,
-      par: snapshot.par,
+      par: snapshot.par ?? legacy?.par,
       start,
       goal,
       rungs,
@@ -311,8 +324,8 @@ export const ladder = {
       difficulty: game.difficulty,
       dateKey: game.dateKey,
       seed: game.seed,
-      startIndex: game.startIndex,
-      goalIndex: game.goalIndex,
+      start: game.start,
+      goal: game.goal,
       par: game.par,
       rungs: game.rungs,
       current: game.current,
@@ -527,7 +540,7 @@ export const ladder = {
     if (!snapshot) return { state: 'new', text: `Not started · ${difficultyLabel}`, action: 'Play' };
 
     const rungs = snapshot.rungs ?? [];
-    const goal = LADDER_COMMON[snapshot.goalIndex];
+    const goal = snapshot.goal ?? null;
 
     if (snapshot.solved || rungs[rungs.length - 1] === goal) {
       const steps = rungs.length;

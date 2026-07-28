@@ -1,6 +1,6 @@
 // Fiver: find a five-letter word in six guesses.
 
-import { hashString, localDateKey, mulberry32 } from '../cipher.js';
+import { hashString, localDateKey, pickBySeed } from '../cipher.js';
 import { ANSWERS, GUESSES } from '../words.js';
 import { QWERTY_ROWS, paintKeyboard } from '../render.js';
 import { formatTime } from '../store.js';
@@ -68,6 +68,11 @@ export function keyboardStates(rows, answer) {
 
 const GLYPH = { hit: 'correct', near: 'wrong place', miss: 'not in the word' };
 
+/** The answer this seed draws. A pure function of the seed and the pool. */
+function answerFor(seed) {
+  return pickBySeed(ANSWERS, seed);
+}
+
 export const fiver = {
   id: 'fiver',
   name: 'Fiver',
@@ -101,17 +106,15 @@ export const fiver = {
     const resolvedSeed =
       seed ??
       (mode === 'daily' ? hashString(`fiver|${dateKey}`) : Math.floor(Math.random() * 0xffffffff));
-    const index =
-      mode === 'daily'
-        ? resolvedSeed % ANSWERS.length
-        : Math.floor(mulberry32(resolvedSeed)() * ANSWERS.length);
-
+    // The answer is derived from the seed, not stored as an index into ANSWERS.
+    // An index is a position, and a position moves the moment a word is added to
+    // or removed from the pool -- which would repoint every saved game at a
+    // different answer. The seed is the identifier; see orderBySeed in cipher.js.
     return this.hydrate({
       mode,
       difficulty: null,
       dateKey,
       seed: resolvedSeed,
-      answerIndex: index,
       rows: [],
       current: '',
       elapsedMs: 0,
@@ -121,7 +124,7 @@ export const fiver = {
   },
 
   hydrate(snapshot) {
-    const answer = ANSWERS[snapshot.answerIndex];
+    const answer = answerFor(snapshot.seed);
     const rows = (snapshot.rows ?? []).slice(0, MAX_ROWS);
 
     return {
@@ -130,7 +133,6 @@ export const fiver = {
       difficulty: null,
       dateKey: snapshot.dateKey,
       seed: snapshot.seed,
-      answerIndex: snapshot.answerIndex,
       answer,
       rows,
       current: (snapshot.current ?? '').slice(0, WORD_LENGTH),
@@ -149,7 +151,6 @@ export const fiver = {
       difficulty: null,
       dateKey: game.dateKey,
       seed: game.seed,
-      answerIndex: game.answerIndex,
       rows: game.rows,
       current: game.current,
       elapsedMs: game.elapsedMs,
@@ -303,7 +304,7 @@ export const fiver = {
   statusFor(snapshot) {
     if (!snapshot) return { state: 'new', text: 'Not started', action: 'Play' };
     const rows = snapshot.rows ?? [];
-    const answer = ANSWERS[snapshot.answerIndex];
+    const answer = answerFor(snapshot.seed);
 
     if (snapshot.solved || rows.includes(answer)) {
       return {

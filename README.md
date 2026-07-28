@@ -53,7 +53,7 @@ because ES modules require HTTP.
 npm test           # node --test, no dependencies
 ```
 
-172 tests over the cipher engine, storage and migration, the shared game
+175 tests over the cipher engine, storage and migration, the shared game
 contract, each game's rules, and the two lists that have to stay in step with the
 registry (the offline precache and the shell's element ids).
 
@@ -65,10 +65,13 @@ to contain a word using all of its letters; every Boxed board has its two-word
 solution replayed through the game's own rules, junction and side checks
 included; and no grid may spell anything offensive in any of eight directions.
 
-One more guards the kind of failure that is silent rather than wrong: every quote
-in the pack has to leave enough letters *out* of itself that Hidden Quote can
-still be lost — a quote using twenty-four letters of the alphabet would draw a row
-of pips that can never all go out.
+Three guard the kind of failure that is silent rather than wrong. No shown word
+pool may contain anything from the tone list, matched by stem so an inflection
+cannot slip through. Every quote in the pack has to leave enough letters *out* of
+itself that Hidden Quote can still be lost — a quote using twenty-four letters of
+the alphabet would draw a row of pips that can never all go out. And no snapshot
+may store a position in a word pool, which is what keeps `words.js` safe to
+regenerate.
 
 ## Home screen
 
@@ -132,7 +135,7 @@ sw.js                   offline cache, network-first
 src/main.js             the shell: views, timer, sheets, wiring
 src/store.js            namespaced storage, per-game stats, streaks, migration
 src/render.js           quote grid + configurable keyboard
-src/cipher.js           seeded RNG, derangements, substitution
+src/cipher.js           seeded RNG, derangements, substitution, pool draws
 src/quotes.js           the quote pack (Cryptogram, Missing Vowels, Hidden Quote)
 src/words.js            GENERATED word lists for Fiver and Word Ladder
 src/games/registry.js   the list of games that drives everything
@@ -213,8 +216,8 @@ than shipped again, so no word is stored twice.
 
 | shown pool | | drawn from |
 |---|---|---|
-| `ANSWERS` 2,257 | five letters | Fiver's puzzles |
-| `LADDER_COMMON` 1,439 | four letters | ladder endpoints and path graph |
+| `ANSWERS` 2,253 | five letters | Fiver's puzzles |
+| `LADDER_COMMON` 1,436 | four letters | ladder endpoints and path graph |
 | `WHEEL_SOURCES` 3,600 | seven to nine | the word a wheel is built from |
 | `SEARCH_WORDS` 1,800 | four to eight | what gets hidden in a grid |
 
@@ -247,22 +250,40 @@ Three filters run over the lot:
   others are ordinary English that the games will happily take if you type them,
   but will not put on a board. Deliberately short: `BREAST`, `THIGH`, `GROIN`,
   `DRUNK` and `OPIUM` are all ordinary words crosswords use without comment, and
-  filtering those would be prudishness rather than judgement.
+  filtering those would be prudishness rather than judgement. Suffix-expanded like
+  the profanity stems, and for the same reason — as an exact-match list it leaked
+  inflections, and `SEXUALITY` shipped as a Word Wheel source while `SEXUALLY`
+  shipped in `SEARCH_WORDS`. `LUSTROUS` and `KINK` are allowed back by hand.
 
-**Regenerating is not a free action.** `WHEEL_SOURCES` and `SEARCH_WORDS` are
-capped, and `spread()` thins to the cap by striding the filtered list, so removing
-a single word shifts every index after it and resamples the whole pool. Measured:
-taking two words out of one filter churned 42% of `WHEEL_SOURCES` and 65% of
-`SEARCH_WORDS`, which changed 30 of 30 Word Search dailies and 11 of 30 Word Wheel
-dailies over the dates checked.
+**Regenerating used to be ruinous, and is now cheap.** This is worth
+understanding before touching a blocklist, because the four-letter one is expected
+to keep growing.
 
-That matters because a snapshot stores an identifier, not the puzzle: Word Search
-rebuilds its grid from a seed plus the pool, and Word Wheel stores a `sourceIndex`
-into `WHEEL_SOURCES`. **So `words.js` is effectively part of the save format for
-those two games.** Both games discard found words a rebuilt board does not
-contain, so the failure is lost progress rather than a corrupt board — but a
-player mid-puzzle does silently get a different one. Regenerate deliberately, and
-expect the dailies to move.
+Two things both worked by position. `spread()` thinned a capped pool by striding
+the filtered list, so removing one word shifted every index after it and resampled
+the whole pool. And every game drew its puzzle with `pool[rand() * pool.length]`,
+so a shifted pool re-rolled essentially every board. Measured on a single
+four-letter blocklist addition: **99.9% of a year of Word Search dailies moved.**
+Worse, three games stored a *position* in their snapshot — `answerIndex`,
+`sourceIndex`, `startIndex`/`goalIndex` — so a regeneration silently repointed
+saved games at other puzzles. `words.js` was effectively part of the save format.
+
+Both are now content-addressed:
+
+- `spread()` keeps the lowest-ranked words by a hash of each word, so a pool that
+  loses one entry loses exactly that entry.
+- `orderBySeed` and `pickBySeed` in `cipher.js` rank candidates by a hash of the
+  seed and the word. A board is a pure function of its seed and the pool's
+  membership, and depends on no word's position.
+- No snapshot stores a pool position. Word Ladder and Boxed store the words —
+  both are shown to the player anyway — and Fiver and Word Wheel re-derive from
+  the seed. There is a test enforcing it, and legacy saves carrying an old index
+  rebuild from their seed rather than opening the wrong puzzle.
+
+The same one-word blocklist addition now moves 1.55% of Word Search dailies, 0.09%
+of Word Ladder, and none at all of Word Wheel or Fiver — and the boards that do
+move are exactly the ones that contained the word you removed. Regenerating is
+still not *nothing*, but it is now proportionate to the edit.
 
 The lists derive from SCOWL, whose licence permits redistribution provided its
 copyright notice travels along — it is reproduced at the top of `src/words.js`.
