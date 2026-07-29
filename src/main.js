@@ -913,9 +913,21 @@ function recordMarkup(mod) {
 
 function paintStats() {
   const global = loadGlobal();
-  $('stat-streak').textContent = String(effectiveStreak(global));
+  const streak = effectiveStreak(global);
+  $('stat-streak').textContent = String(streak);
   $('stat-maxstreak').textContent = String(global.maxStreak);
   $('stat-total').textContent = String(global.totalSolved);
+
+  // The streak hero leads the sheet: a lit flame when it's alive, a cold one
+  // when it has lapsed, plus an honest line about where it stands.
+  const hero = $('streak-hero');
+  hero.classList.toggle('is-cold', streak === 0);
+  $('streak-hero-cap').textContent = streak === 1 ? 'Day streak' : 'Days streak';
+  let sub;
+  if (streak === 0) sub = 'Solve a puzzle today to light it back up';
+  else if (streak >= global.maxStreak) sub = 'Your best streak yet — keep it alive';
+  else sub = `${global.maxStreak - streak} more to match your best`;
+  $('streak-hero-sub').textContent = sub;
 
   const host = $('stats-games');
   host.textContent = '';

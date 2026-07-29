@@ -288,8 +288,23 @@
       </div>
 
       <h2 class="sheet-title" id="stats-title">Statistics</h2>
-      <dl class="stat-grid">
-        <div><dt>Daily streak</dt><dd id="stat-streak">0</dd></div>
+
+      <!-- Streak hero: the star of the summary. -->
+      <section class="streak-hero" id="streak-hero">
+        <div class="streak-hero-glow" aria-hidden="true"></div>
+        <span class="streak-hero-flame" aria-hidden="true">
+          <svg class="flame" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M13.5 2c.4 3 2.2 3.7 3.3 5.4A7 7 0 1 1 6 12c0-2.5 1.4-4.1 2.6-5.3.2 1.8.9 2.7 1.7 2.7.9 0 1.4-.8 1.2-2C11.2 5.7 12.3 3.4 13.5 2z"
+            />
+          </svg>
+        </span>
+        <div class="streak-hero-num" id="stat-streak">0</div>
+        <div class="streak-hero-cap" id="streak-hero-cap">Day streak</div>
+        <div class="streak-hero-sub" id="streak-hero-sub"></div>
+      </section>
+
+      <dl class="stat-grid stat-grid-2">
         <div><dt>Best streak</dt><dd id="stat-maxstreak">0</dd></div>
         <div><dt>Solved</dt><dd id="stat-total">0</dd></div>
       </dl>
