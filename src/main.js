@@ -267,6 +267,18 @@ function startFresh(mod, mode) {
 
 // --- painting the game view -------------------------------------------------
 
+// Hints are a budget, not a firehose: the harder the setting, the fewer you
+// get. Every hinting game uses the same three difficulty keys, so one table
+// covers them all; a game without difficulties is uncapped.
+const HINT_LIMITS = { easy: 5, medium: 3, hard: 1 };
+
+/** Hints remaining on the active board, or null when no cap applies. */
+function hintsLeft(game, settings) {
+  const cap = HINT_LIMITS[settings.difficulty];
+  if (cap == null) return null;
+  return Math.max(0, cap - (game.hintsUsed ?? 0));
+}
+
 function paintGame() {
   if (!active) return;
   const { mod, game, settings } = active;
@@ -293,8 +305,15 @@ function paintGame() {
   }
 
   const done = game.solved || game.lost;
+  const left = hintsLeft(game, settings);
   for (const btn of dom.toolbar.querySelectorAll('[data-tool]')) {
-    btn.disabled = done && btn.dataset.tool !== 'new';
+    btn.disabled =
+      (done && btn.dataset.tool !== 'new') ||
+      (btn.dataset.tool === 'hint' && left === 0);
+    // The label carries the budget, so running low is visible before it bites.
+    if (btn.dataset.tool === 'hint') {
+      btn.querySelector('.tool-label').textContent = left == null ? 'Hint' : `Hint (${left})`;
+    }
   }
 }
 
@@ -460,10 +479,11 @@ function showOutcome(won, global, streakBefore = 0) {
 
   $('share-preview').textContent = shareText();
 
-  // Chain the dailies: after a daily, the strongest button leads to the next
-  // unplayed one -- "Play again" starts free play, which never advances the
-  // streak, so it only appears once Today is empty. A loss gets the same
-  // pointer; the player who lost is the one most in need of a next thing.
+  // Home is the call to action; the link under it still chains the dailies.
+  // After a daily it names the next unplayed one -- "Play again" starts free
+  // play, which never advances the streak, so it only appears once Today is
+  // empty. A loss gets the same pointer; the player who lost is the one most
+  // in need of a next thing.
   winNextTarget = game.mode === 'daily' ? nextDaily(mod.id) : null;
   $('btn-win-next').textContent = winNextTarget ? `Next: ${winNextTarget.name}` : 'Play again';
 
@@ -1006,14 +1026,21 @@ function wireEvents() {
   dom.toolbar.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-tool]');
     if (!btn || !active) return;
-    const { mod, game } = active;
+    const { mod, game, settings } = active;
 
     if (btn.dataset.tool === 'new') {
       // Daily is one puzzle a day by definition, so New moves into free play.
       startFresh(mod, 'free');
       return;
     }
-    if (btn.dataset.tool === 'hint') afterMove(mod.hint(game));
+    if (btn.dataset.tool === 'hint') {
+      // The button disables at zero; this guard covers any other route in.
+      if (hintsLeft(game, settings) === 0) {
+        toast('No hints left on this one');
+        return;
+      }
+      afterMove(mod.hint(game));
+    }
     else if (btn.dataset.tool === 'check') afterMove(mod.check(game));
     else if (btn.dataset.tool === 'reset') afterMove(mod.reset(game));
   });

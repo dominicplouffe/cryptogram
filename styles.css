@@ -2281,6 +2281,26 @@ svg {
   align-self: center;
 }
 
+/* Home above is the call to action; the next daily reads as a footnote link.
+   Full width keeps the tap target honest even though it looks like an anchor. */
+.win-next {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.win-next:active {
+  color: var(--text);
+}
+
 /* --- segmented controls --------------------------------------------------- */
 
 .segmented {
