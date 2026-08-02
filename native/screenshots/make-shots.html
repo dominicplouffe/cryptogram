@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>loading</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  iframe {
+    border: 0;
+    display: block;
+  }
+</style>
+<script>
+  // Throwaway store-screenshot driver. ?scene=home|library|cryptogram|fiver|hidden
+  // &w=&h= set the CSS viewport; Chrome's --force-device-scale-factor supplies
+  // the pixel density. Seeds a rich-but-honest state, drives real clicks, then
+  // freezes animation and flags READY in the title. Delete before committing.
+  const q = new URLSearchParams(location.search);
+  const scene = q.get('scene') || 'home';
+  const W = Number(q.get('w') || 430);
+  const H = Number(q.get('h') || 932);
+
+  localStorage.clear();
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const today = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  const set = (k, v) => localStorage.setItem('pwg.v1.' + k, JSON.stringify(v));
+
+  set('migrated', true);
+  set('settings', { theme: 'dark', sound: false, haptics: true });
+  set('global', { streak: 12, maxStreak: 18, lastSolvedDate: today, totalSolved: 214 });
+  const base = {
+    played: 40,
+    solved: 34,
+    lost: 2,
+    currentStreak: 6,
+    maxStreak: 11,
+    lastDailySolved: '',
+    totalHints: 9,
+    bestTimes: { easy: 64000, medium: 118000, hard: 204000 },
+  };
+  const ids = ['cryptogram', 'fiver', 'vowels', 'hidden', 'ladder', 'wheel', 'boxed', 'search'];
+  ids.forEach((id, i) =>
+    set(id + '.stats', {
+      ...base,
+      played: 30 + i * 3,
+      solved: 24 + i * 2,
+      bestTimes: {
+        easy: 51000 + i * 9000,
+        medium: 94000 + i * 13000,
+        hard: 171000 + i * 21000,
+      },
+    })
+  );
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function until(fn, ms = 8000) {
+    const t0 = Date.now();
+    for (;;) {
+      let v;
+      try {
+        v = fn();
+      } catch {}
+      if (v) return v;
+      if (Date.now() - t0 > ms) return null;
+      await sleep(50);
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    const f = document.createElement('iframe');
+    f.src = 'index.html';
+    f.width = W;
+    f.height = H;
+    document.body.append(f);
+
+    const win = await until(() => {
+      const w = f.contentWindow;
+      const date = w && w.document && w.document.getElementById('home-date');
+      return date && date.textContent.trim() ? w : null;
+    });
+    if (!win) {
+      document.title = 'BOOT FAILED';
+      return;
+    }
+    const doc = win.document;
+    const key = (k) => doc.querySelector(`#keyboard .key[data-key="${k}"]`);
+    // The row background is not the play surface; the [data-role="open"]
+    // button inside it is.
+    const open = async (id) => {
+      const btn =
+        doc.querySelector(`#view-home [data-game="${id}"] [data-role="open"]`) ||
+        doc.querySelector(`#view-home [data-game="${id}"]`);
+      btn.click();
+      const opened = await until(() => !doc.getElementById('view-game').hidden);
+      if (!opened) throw new Error(`game ${id} did not open`);
+      await sleep(300);
+    };
+
+    try {
+    if (scene === 'library') {
+      doc.getElementById('list-games').scrollIntoView({ block: 'start' });
+    } else if (scene === 'cryptogram') {
+      await open('cryptogram');
+      const letters = 'STONEA';
+      const cells = [...doc.querySelectorAll('#puzzle [data-index]')];
+      const picks = [0, 0.2, 0.45, 0.6, 0.8, 0.99].map((r) =>
+        Math.min(cells.length - 1, Math.floor(cells.length * r))
+      );
+      for (let i = 0; i < picks.length; i++) {
+        cells[picks[i]].click();
+        await sleep(60);
+        key(letters[i])?.click();
+        await sleep(60);
+      }
+    } else if (scene === 'fiver') {
+      await open('fiver');
+      for (const word of ['CRANE', 'SPILT']) {
+        for (const ch of word) {
+          key(ch)?.click();
+          await sleep(40);
+        }
+        key('ENTER')?.click();
+        await sleep(250);
+      }
+      for (const ch of 'MOU') {
+        key(ch)?.click();
+        await sleep(40);
+      }
+    } else if (scene === 'hidden') {
+      await open('hidden');
+      for (const ch of 'ETAOIN') {
+        key(ch)?.click();
+        await sleep(150);
+      }
+    }
+
+    } catch (err) {
+      document.title = 'SCENE FAILED: ' + err.message;
+      return;
+    }
+
+    await sleep(500);
+    const style = doc.createElement('style');
+    style.textContent = '* { transition: none !important; animation: none !important; }';
+    doc.head.append(style);
+    if (scene !== 'library') win.scrollTo(0, 0);
+    document.title = `READY ${window.innerWidth}x${window.innerHeight}`;
+  });
+</script>
