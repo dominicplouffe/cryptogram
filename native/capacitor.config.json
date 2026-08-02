@@ -1,6 +1,6 @@
 {
   "appId": "com.plouffe.wordgames",
-  "appName": "Plouffe Word Games",
+  "appName": "Word Games",
   "webDir": "www",
   "server": {
     "androidScheme": "https"
