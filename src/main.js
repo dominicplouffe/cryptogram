@@ -13,7 +13,14 @@ import {
   gameById,
 } from './games/registry.js';
 import { buildKeyboard, burstConfetti } from './render.js';
-import { setHapticsEnabled, setSoundEnabled, sfx } from './sound.js';
+import {
+  initNative,
+  isNative,
+  nativeCopy,
+  nativeShare,
+  setStatusBarTheme,
+} from './native.js';
+import { resumeAudio, setHapticsEnabled, setSoundEnabled, sfx } from './sound.js';
 import {
   clearProgress,
   dailyNumber,
@@ -988,6 +995,13 @@ function openDialog(dialog) {
 function applyTheme() {
   if (appSettings.theme === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', appSettings.theme);
+
+  // The OS status bar is not part of the page; the shell has to be told.
+  const dark =
+    appSettings.theme === 'auto'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : appSettings.theme === 'dark';
+  setStatusBarTheme(dark);
 }
 
 // --- events -----------------------------------------------------------------
@@ -1073,6 +1087,8 @@ function wireEvents() {
 
   $('btn-win-share').addEventListener('click', async () => {
     const text = $('share-preview').textContent;
+    // The native share sheet first: neither WebView implements navigator.share.
+    if (await nativeShare(text)) return;
     // navigator.share needs a user gesture and https; the clipboard is the
     // fallback everywhere else, including desktop.
     try {
@@ -1082,6 +1098,10 @@ function wireEvents() {
       }
     } catch {
       return; // the user closed the share tray; not an error
+    }
+    if (await nativeCopy(text)) {
+      toast('Copied to clipboard');
+      return;
     }
     try {
       await navigator.clipboard.writeText(text);
@@ -1257,9 +1277,79 @@ function wireEvents() {
   });
 }
 
+// --- native shell -----------------------------------------------------------
+
+/** App back on screen. Mirrors the visibilitychange handler: the date may have
+    rolled over, and WKWebView suspends the AudioContext while backgrounded. */
+function handleResume() {
+  resumeAudio();
+  applyTheme(); // the OS theme may have changed while we were away
+  if (view === 'home') paintHome();
+  syncTimer();
+  syncCountdown();
+}
+
+/** The Android back gesture, one layer at a time: an open sheet closes, a game
+    returns home, and home hands the event back to the OS. */
+function handleNativeBack() {
+  for (const dialog of [dom.dlgWin, dom.dlgStats, dom.dlgGame, dom.dlgSettings]) {
+    if (dialog.open) {
+      dialog.close();
+      return;
+    }
+  }
+  if (view === 'game') {
+    goHome();
+    return;
+  }
+  return 'exit';
+}
+
+/**
+ * The layout needs :has() and dvh units. Every WebView new enough to be a
+ * Capacitor target on iOS ships them; on Android the System WebView updates
+ * through Play independently of the OS, so an ancient one is rare but possible
+ * and would render garbage. Better an honest message than a broken board.
+ */
+function webViewTooOld() {
+  return (
+    isNative() &&
+    !(CSS.supports('height', '100dvh') && CSS.supports('selector(:has(*))'))
+  );
+}
+
+function showWebViewNotice() {
+  const panel = document.createElement('div');
+  // Inline styles only: the stylesheet is exactly what an old WebView mangles.
+  panel.setAttribute(
+    'style',
+    'position:fixed;inset:0;z-index:99;display:flex;align-items:center;' +
+      'justify-content:center;text-align:center;padding:24px;' +
+      'background:#150f26;color:#f3f1fa;font:16px/1.5 system-ui,sans-serif'
+  );
+  panel.textContent =
+    'This app needs a newer Android System WebView. ' +
+    'Please update it from the Play Store, then reopen the app.';
+  document.body.append(panel);
+}
+
 // --- boot -------------------------------------------------------------------
 
-function boot() {
+async function boot() {
+  if (webViewTooOld()) {
+    showWebViewNotice();
+    return;
+  }
+
+  // Native first: it restores mirrored storage before anything reads settings
+  // or stats, and wires pause/resume/back to the same handlers the web wires
+  // to visibilitychange/popstate below.
+  await initNative({
+    onPause: persist,
+    onResume: handleResume,
+    onBack: handleNativeBack,
+  });
+
   migrateLegacy();
   appSettings = loadAppSettings();
   applyTheme();
@@ -1280,14 +1370,18 @@ function boot() {
 
   if (!storageAvailable()) toast('Private mode: progress will not be saved');
 
-  if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+  // Not on native: the Capacitor origin is literally localhost, and the dev
+  // scan must not run (or warn) on every production boot.
+  if (!isNative() && ['localhost', '127.0.0.1'].includes(location.hostname)) {
     const problems = validateQuotes();
     if (problems.length) console.warn('Quote pack issues:\n' + problems.join('\n'));
   }
 
   // isSecureContext covers https and localhost, which is where service workers
-  // are permitted to register at all.
-  if ('serviceWorker' in navigator && window.isSecureContext) {
+  // are permitted to register at all. Never in the native shell: assets ship in
+  // the app bundle, and a worker would only add a stale-cache path and a
+  // mid-puzzle reload on upgrade.
+  if (!isNative() && 'serviceWorker' in navigator && window.isSecureContext) {
     // The load that discovers a new worker is still served by the old one, so on
     // an upgrade this page is showing stale assets. Reload once when the new
     // worker takes control. Guarded two ways: only when a controller already

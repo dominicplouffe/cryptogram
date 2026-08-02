@@ -11,7 +11,7 @@
 
 import { localDateKey } from './cipher.js';
 
-const NS = 'pwg.v1.';
+export const NS = 'pwg.v1.';
 const LEGACY_NS = 'cryptogram.v1.';
 const MIGRATED_KEY = `${NS}migrated`;
 
@@ -19,6 +19,17 @@ const MIGRATED_KEY = `${NS}migrated`;
 // Every access is guarded. Safari in private mode throws on write, and a storage
 // failure must degrade to "plays fine, just doesn't remember" rather than taking
 // the whole game down.
+
+// The native shell registers a mirror that snapshots the namespace into durable
+// storage, because a WebView's localStorage can be evicted. On the web this
+// stays null and costs nothing. writeJSON/removeKey are the only two mutation
+// paths, so notifying from just these covers every save in the app.
+let mirror = null;
+
+/** @param {{onChange: () => void}} m */
+export function setStorageMirror(m) {
+  mirror = m;
+}
 
 function readJSON(key, fallback) {
   try {
@@ -32,6 +43,7 @@ function readJSON(key, fallback) {
 function writeJSON(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    mirror?.onChange();
     return true;
   } catch {
     return false;
@@ -41,6 +53,7 @@ function writeJSON(key, value) {
 function removeKey(key) {
   try {
     localStorage.removeItem(key);
+    mirror?.onChange();
   } catch {
     /* nothing sensible to do */
   }

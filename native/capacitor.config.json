@@ -1,0 +1,22 @@
+{
+  "appId": "com.plouffe.wordgames",
+  "appName": "Plouffe Word Games",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "ios": {
+    "backgroundColor": "#150f26",
+    "contentInset": "never"
+  },
+  "android": {
+    "backgroundColor": "#150f26"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#150f26",
+      "launchShowDuration": 400,
+      "launchAutoHide": true
+    }
+  }
+}

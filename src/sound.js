@@ -10,6 +10,8 @@
 // happens inside a user-gesture handler -- creating it at load time would leave
 // it permanently 'suspended' under autoplay policy.
 
+import { nativeHaptic } from './native.js';
+
 let ctx = null;
 let soundOn = false;
 let hapticsOn = true;
@@ -32,6 +34,12 @@ function context() {
   }
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   return ctx;
+}
+
+/** WKWebView suspends the context when the app backgrounds and does not always
+    bring it back; the shell calls this on every resume. */
+export function resumeAudio() {
+  if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
 }
 
 /**
@@ -68,6 +76,9 @@ function tone({ freq, to, type = 'sine', dur = 0.08, gain = 0.08, at = 0 }) {
 
 function buzz(pattern) {
   if (!hapticsOn) return;
+  // The native engine first -- it is the only path that works on iOS, where
+  // navigator.vibrate does not exist.
+  if (nativeHaptic(pattern)) return;
   navigator.vibrate?.(pattern);
 }
 

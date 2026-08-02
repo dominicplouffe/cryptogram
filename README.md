@@ -295,6 +295,16 @@ copyright notice travels along — it is reproduced at the top of `src/words.js`
 ## Icons
 
 `node tools/make-icons.mjs` regenerates `icons/icon-192.png` and
-`icons/icon-512.png`. It rasterizes the mark and encodes the PNG with Node's
-built-in `zlib`, so it needs no image tooling installed. Keep `icons/icon.svg` in
-sync if you change the geometry.
+`icons/icon-512.png`, plus the store-asset sources in `native/assets/` (the
+1024 App Store icon, the Android adaptive-icon pair, and the splash squares).
+It rasterizes the mark and encodes the PNG with Node's built-in `zlib`, so it
+needs no image tooling installed. Keep `icons/icon.svg` in sync if you change
+the geometry.
+
+## Native apps
+
+`native/` holds Capacitor shells that package this same app for the App Store
+and Google Play — see `native/README.md`. The web app is unaffected: the only
+web-side file involved is `src/native.js`, which detects the injected Capacitor
+runtime and no-ops in a browser. All npm tooling is quarantined inside
+`native/`; the root stays dependency-free.

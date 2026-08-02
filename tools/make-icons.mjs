@@ -1,10 +1,15 @@
-// Generates the PWA PNG icons.
+// Generates the PWA PNG icons and the source images the app stores need.
 //
 // There is no ImageMagick / rsvg / headless browser on the build machine, so
 // this rasterizes the mark by hand and encodes a PNG with Node's built-in
 // zlib. The mark is deliberately all rectangles -- three cryptogram cells, two
 // solved and one still blank -- because rectangles are trivial to rasterize
 // without a drawing library.
+//
+// Alongside the PWA icons in icons/, this writes native/assets/: a 1024 store
+// icon, the Android adaptive-icon foreground/background pair, and 2732 splash
+// squares, in the names `@capacitor/assets` expects. `npm run assets` inside
+// native/ then fans them out to every density both platforms want.
 //
 // Run: node tools/make-icons.mjs
 
@@ -13,7 +18,9 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'icons');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const OUT_DIR = join(ROOT, 'icons');
+const NATIVE_DIR = join(ROOT, 'native', 'assets');
 const SS = 4; // supersampling factor; corners would otherwise be jagged
 
 const BG = [21, 15, 38, 255]; // #150f26 — the Arcade plum ground
@@ -156,28 +163,41 @@ function encodePNG(canvas) {
  * underline) and one still blank (bare dim underline). All geometry is
  * expressed as a fraction of the canvas, and content stays inside the middle
  * 72% so the icon survives a maskable circle crop.
+ *
+ * @param {object} [opts]
+ * @param {number[]|null} [opts.bg] background color, or null for transparent
+ * @param {number} [opts.radius] background corner radius as a canvas fraction
+ * @param {number} [opts.scale] shrink the cells about the center; 1 is the PWA
+ *   icon. The adaptive-icon and splash variants need the mark inside a smaller
+ *   safe zone than the maskable-icon 72%.
  */
-function drawMark(canvas) {
+function drawMark(canvas, { bg = BG, radius = 0.2, scale = 1 } = {}) {
   const S = canvas.size;
 
-  fillRect(canvas, 0, 0, S, S, S * 0.2, BG);
+  if (bg) fillRect(canvas, 0, 0, S, S, S * radius, bg);
+  if (scale === 0) return; // background-only variant
 
-  const cellW = S * 0.2;
-  const gap = S * 0.06;
+  // x' = mid + (x - mid) * scale, precomputed on the fractions. scale 1 keeps
+  // the exact original expression so the PWA icons stay byte-identical.
+  const f = scale === 1 ? (v) => S * v : (v) => S * (0.5 + (v - 0.5) * scale);
+  const d = (v) => S * v * scale;
+
+  const cellW = d(0.2);
+  const gap = d(0.06);
   const totalW = cellW * 3 + gap * 2;
   const left = (S - totalW) / 2;
 
-  const blockTop = S * 0.31;
-  const blockH = S * 0.25;
-  const barTop = S * 0.62;
-  const barH = S * 0.055;
+  const blockTop = f(0.31);
+  const blockH = d(0.25);
+  const barTop = f(0.62);
+  const barH = d(0.055);
 
   for (let i = 0; i < 3; i++) {
     const x = left + i * (cellW + gap);
     const solved = i !== 1;
 
     if (solved) {
-      fillRect(canvas, x, blockTop, cellW, blockH, S * 0.035, ACCENT);
+      fillRect(canvas, x, blockTop, cellW, blockH, d(0.035), ACCENT);
     }
     fillRect(canvas, x, barTop, cellW, barH, barH / 2, solved ? ACCENT : DIM);
   }
@@ -185,13 +205,38 @@ function drawMark(canvas) {
 
 // --- run --------------------------------------------------------------------
 
-mkdirSync(OUT_DIR, { recursive: true });
-
-for (const size of [192, 512]) {
-  const canvas = createCanvas(size * SS);
-  drawMark(canvas);
-  const png = encodePNG(downsample(canvas, SS));
-  const file = join(OUT_DIR, `icon-${size}.png`);
+/** @param {number} ss supersampling; the 2732 splashes use 2 to keep the
+    intermediate raster under control (rectangles barely need smoothing). */
+function render(file, size, opts, ss = SS) {
+  const canvas = createCanvas(size * ss);
+  drawMark(canvas, opts);
+  const png = encodePNG(downsample(canvas, ss));
   writeFileSync(file, png);
   console.log(`wrote ${file} (${png.length} bytes)`);
+}
+
+mkdirSync(OUT_DIR, { recursive: true });
+mkdirSync(NATIVE_DIR, { recursive: true });
+
+// The PWA icons: rounded plum tile, mark at full size.
+for (const size of [192, 512]) {
+  render(join(OUT_DIR, `icon-${size}.png`), size, {});
+}
+
+// The store icon: full-bleed square, no alpha corners -- the OS does the
+// masking, and App Store Connect rejects transparency.
+render(join(NATIVE_DIR, 'icon-only.png'), 1024, { radius: 0 });
+
+// Android adaptive icon: the launcher composes foreground over background and
+// may crop to a circle of ~61% of the canvas, so the mark shrinks to keep its
+// corners inside that circle (0.7 puts them at ~0.29 of the canvas from
+// center, safely under the 0.306 limit).
+render(join(NATIVE_DIR, 'icon-foreground.png'), 1024, { bg: null, scale: 0.7 });
+render(join(NATIVE_DIR, 'icon-background.png'), 1024, { radius: 0, scale: 0 });
+
+// Splash squares: capacitor-assets center-crops these to every device aspect,
+// so the mark stays small in the middle. One plum design for both themes --
+// the app's identity color, and it matches the configured WebView background.
+for (const name of ['splash.png', 'splash-dark.png']) {
+  render(join(NATIVE_DIR, name), 2732, { radius: 0, scale: 0.35 }, 2);
 }

@@ -1,0 +1,28 @@
+{
+  "name": "plouffe-word-games-native",
+  "private": true,
+  "type": "module",
+  "description": "Capacitor shells for the App Store and Google Play. The web app in the repo root stays dependency-free; everything npm lives here.",
+  "scripts": {
+    "sync": "node sync-www.mjs && cap sync",
+    "android": "npm run sync && cap run android",
+    "ios": "npm run sync && cap open ios",
+    "assets": "capacitor-assets generate --assetPath assets --ios --android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/clipboard": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/preferences": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  }
+}
