@@ -5,8 +5,11 @@ driver seeds a rich-but-honest state (12-day streak, varied per-game stats)
 and plays real moves by clicking cells and keys; every board shown is one the
 app actually rendered.
 
-- `appstore/` — five shots at 1290×2796 (the 6.7" size App Store Connect
-  accepts for all iPhones). Upload at least three.
+- `appstore/` — five shots at 1290×2796, for the App Store Connect slot
+  labeled 6.7"/6.9" display. Upload at least three.
+- `appstore-6.5/` — the same scenes at 1284×2778 for the 6.5" display slot
+  (App Store Connect rejects the 1290×2796 files there; it lists 1242×2688 /
+  1284×2778 as that slot's accepted sizes).
 - `play/` — the same five scenes at 1080×2160 (Play caps screenshot aspect at
   2:1), plus `feature-graphic.png` at 1024×500.
 
@@ -17,6 +20,7 @@ python3 -m http.server 8123 &
 cp native/screenshots/make-shots.html _shots.html    # driver must be same-origin
 for s in home library cryptogram fiver hidden; do
   native/screenshots/shoot.sh $s 430 932 1290 2796 native/screenshots/appstore/$s.png
+  native/screenshots/shoot.sh $s 428 926 1284 2778 native/screenshots/appstore-6.5/$s.png
   native/screenshots/shoot.sh $s 360 720 1080 2160 native/screenshots/play/$s.png
 done
 rm _shots.html
